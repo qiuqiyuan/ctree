@@ -8,7 +8,7 @@ Usage:
 The resulting file can be viewed with a visualizer like Graphiz.
 """
 
-from ctree.nodes import *
+from ctree.nodes.c import *
 
 def main():
   stmt0 = Assign(SymbolRef('foo'), Constant(123.4))
