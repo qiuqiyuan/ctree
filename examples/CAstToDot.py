@@ -14,7 +14,7 @@ def main():
   stmt0 = Assign(SymbolRef('foo'), Constant(123.4))
   stmt1 = FunctionDecl(Float(), SymbolRef("bar"), [Int(), Long()], [String("baz")])
   tree = File([stmt0, stmt1])
-  print (tree.to_dot())
+  print (tree.visualize())
 
 if __name__ == '__main__':
   main()
