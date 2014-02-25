@@ -13,7 +13,10 @@ class DotGenerator(NodeVisitor):
 
   We can use pydot to do this, instead of using plain string concatenation.
   """
-  graph = Dot(graph_type='digraph')
+
+  def __init__(self):
+    super()
+    self.graph = Dot(graph_type='digraph')
 
   def generate_from(self, node):
     self.visit(node)
