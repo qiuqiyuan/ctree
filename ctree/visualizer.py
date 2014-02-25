@@ -1,4 +1,4 @@
-import ast
+import ast, tkinter
 try:
   from pydot import *
 except ImportError:
@@ -11,14 +11,21 @@ class Visualizer(NodeVisitor):
   Generates a graphical representation of the AST.
   """
 
-  def __init__(self, name):
+  def __init__(self):
     super()
     self.graph = Dot(graph_type='digraph')
-    self.graph_name = name + ".png" if name else 'default.png'
 
   def generate_from(self, node):
     self.visit(node)
-    self.graph.write_png(self.graph_name)
+    self.graph.write_gif('tmp.gif')
+    root = tkinter.Tk()
+    self.photo = tkinter.PhotoImage(file="./tmp.gif")
+    canvas = tkinter.Canvas(root, width=self.photo.width(), height=self.photo.height())
+    canvas.grid(row = 0, column = 0)
+    canvas.create_image(0, 0, image=self.photo, anchor=tkinter.NW)
+    root.mainloop()
+    import os
+    os.remove('./tmp.gif')
 
   def label_SymbolRef(self, node):
     return "name: %s" % node.name

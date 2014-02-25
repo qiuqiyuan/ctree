@@ -37,10 +37,10 @@ class CAstNode(ast.AST):
     from ctree.dotgen import DotGenerator
     return DotGenerator().generate_from(self)
 
-  def visualize(self, name=None):
+  def visualize(self):
     """Renders a file 'name'.png with a graphical representation of the AST"""
     from ctree.visualizer import Visualizer
-    return Visualizer(name).generate_from(self)
+    return Visualizer().generate_from(self)
 
 
   def get_root(self):
