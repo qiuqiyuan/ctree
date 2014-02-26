@@ -50,19 +50,24 @@ class Visualizer(NodeVisitor):
 
   def generic_visit(self, node):
     # label this node
-    graph_node = Node(self.label(node))
+    graph_node = Node(str(id(node)), label=self.label(node))
     self.graph.add_node(graph_node)
+
+    if hasattr(node, 'parent') and node.parent != None:
+      # PyDot returns a list of nodes with the same name.
+      # TODO: Can we assume there will only be one node with a certain name?
+      parent = self.graph.get_node(str(id(node.parent)))[0]
+      self.graph.add_edge(Edge(graph_node, parent, label="parent",
+                               style="dotted"))
 
     for fieldname, child in ast.iter_fields(node):
       if type(child) is list:
         for i, grandchild in enumerate(child):
-          grandchild = self.visit(grandchild)
-          self.graph.add_edge(Edge(graph_node, grandchild, label="%s[%d]" % (fieldname, i)))
-          self.graph.add_edge(Edge(grandchild, graph_node, label="parent", style="dotted"))
+          self.graph.add_edge(Edge(graph_node, self.visit(grandchild),
+                                   label="%s[%d]" % (fieldname, i)))
       elif isinstance(child, ast.AST):
-        child = self.visit(child)
-        self.graph.add_edge(Edge(graph_node, child, label=fieldname))
-        self.graph.add_edge(Edge(child, graph_node, label="parent", style="dotted"))
+        self.graph.add_edge(Edge(graph_node, self.visit(child),
+                                 label=fieldname))
     return graph_node
 
 def visualize(node, name=None):
