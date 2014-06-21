@@ -151,26 +151,42 @@ class Fuser(object):
         tree = get_ast(self.body)
         #for expr in tree.body[0].body:
             #ctree.browser_show_ast(expr, 'tmp.png')
-        FusionWrapper(self).visit(tree)
+        BlockBuilder(self).visit(tree)
         visitor = UniqueNamer(set())
         for block in self.blocks:
             visitor.visit(block)
             visitor = UniqueNamer(visitor.seen.union(visitor.prev_seen))
-        self.blocks[0].body.extend(self.blocks[1].body)
-        #FusionTransformer().visit(self.blocks[0])
-        FuseFunctions().visit(self.blocks[0])
-        FuseLoops().visit(self.blocks[0])
+        main_file = self.blocks[0]
+
+        # Fuse file bodies
+        for block in self.blocks[1:]:
+            main_file.body.extend(block.body)
+
+        # Fuse functions into one entry point
+        FuseFunctions().visit(main_file)
+
+        # Fuse any fusable loops
+        FuseLoops().visit(main_file)
+
+        # Find arguments that can be promoted to registers
         replace_args = []
         for index1, arg1 in enumerate(self.arg_names):
             for index2, arg2 in enumerate(self.arg_names[index1 + 1:]):
                 if arg1 == arg2:
                     replace_args.append((index1, 1 + index1 + index2))
                     self.args = self.args[:index1] + self.args[index1 + 1:  1 + index1 + index2] + self.args[ 1 + index1 + index2 + 1:]
+        
+        # Promote arguments to registers
         for replace in replace_args:
-            ArgReplacer(replace).visit(self.blocks[0].body[1])
-        ctree.browser_show_ast(self.blocks[0], 'tmp.png')
-        self.blocks[0].body.append(self.blocks[0].body.pop(1))
-        proj = Project([self.blocks[0]])
+            ArgReplacer(replace).visit(main_file.body[1])
+
+        #ctree.browser_show_ast(main_file, 'tmp.png')
+        # TODO: Figure out a better way to do this, inline function needs to appear before the fused function
+        main_file.body.append(main_file.body.pop(1))
+
+        # Compile and call fused function
+        # TODO: This should be handle by composer interface
+        proj = Project([main_file])
         VerifyOnlyCtreeNodes().visit(proj)
         typesig = proj.find(FunctionDecl, name='apply_elementwise').get_type().as_ctype()
         self.module = proj.codegen()
@@ -295,8 +311,9 @@ class VarReplacer(ast.NodeTransformer):
         return node
 
 
-class FusionWrapper(ast.NodeVisitor):
+class BlockBuilder(ast.NodeVisitor):
     def __init__(self, fuser):
+        super(BlockBuilder, self).__init__()
         self.fuser = fuser
 
     def visit_Call(self, node):
@@ -304,7 +321,7 @@ class FusionWrapper(ast.NodeVisitor):
             self.fuser.arg_names.append(arg.id)
         args = [node.func]
         args.extend(node.args)
-        checker = ast.Expression(ast.Call(
+        append_block = ast.Expression(ast.Call(
                     func=ast.Attribute(
                         value=ast.Attribute(
                             value=ast.Name('self', ast.Load()),
@@ -320,8 +337,8 @@ class FusionWrapper(ast.NodeVisitor):
                     kwargs=None
                 )
                 )
-        checker = ast.fix_missing_locations(checker)
-        result = eval(compile(checker, '', 'eval'))
+        append_block = ast.fix_missing_locations(append_block)
+        eval(compile(append_block, '', 'eval'))
 
 # ---------------------------------------------------------------------------
 # User code
