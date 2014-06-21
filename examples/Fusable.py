@@ -370,7 +370,38 @@ def py_sub(a, b):
 c_add = Add()
 c_sub = Sub()
 
-# doubling doubles
+a = np.ones(12, dtype=np.float64)
+b = np.ones(12, dtype=np.float64)
+c = np.ones(12, dtype=np.float64)
+tmp1 = np.ones(12, dtype=np.float64)
+actual_d = np.ones(12, dtype=np.float64)
+class Fuse(Fuser):
+    def fuse(self):
+        c_add(a, b, tmp1)
+        c_add(tmp1, c, actual_d)
+Fuse().fuse()
+tmp1 = py_add(a, b)
+expected_d = py_add(tmp1, c)
+np.testing.assert_array_equal(actual_d, expected_d)
+
+a = np.ones(12, dtype=np.float64)
+b = np.ones(12, dtype=np.float64)
+c = np.ones(12, dtype=np.float64)
+tmp1 = np.ones(12, dtype=np.float64)
+tmp2 = np.ones(12, dtype=np.float64)
+d = np.ones(12, dtype=np.float64)
+actual_e = np.ones(12, dtype=np.float64)
+class Fuse(Fuser):
+    def fuse(self):
+        c_add(a, b, tmp1)
+        c_add(tmp1, c, tmp2)
+        c_sub(tmp2, d, actual_e)
+Fuse().fuse()
+tmp1 = py_add(a, b)
+tmp2 = py_add(tmp1, c)
+expected_e = py_sub(tmp2, d)
+np.testing.assert_array_equal(actual_e, expected_e)
+
 a = np.ones(12, dtype=np.float64)
 b = np.ones(12, dtype=np.float64)
 c = np.ones(12, dtype=np.float64)
