@@ -169,16 +169,24 @@ class Fuser(object):
         FuseLoops().visit(main_file)
 
         # Find arguments that can be promoted to registers
+        self.args = list(self.args)
         replace_args = []
         for index1, arg1 in enumerate(self.arg_names):
             for index2, arg2 in enumerate(self.arg_names[index1 + 1:]):
                 if arg1 == arg2:
                     replace_args.append((index1, 1 + index1 + index2))
-                    self.args = self.args[:index1] + self.args[index1 + 1:  1 + index1 + index2] + self.args[ 1 + index1 + index2 + 1:]
         
+        tmp = []
         # Promote arguments to registers
         for replace in replace_args:
             ArgReplacer(replace).visit(main_file.body[1])
+            tmp.extend(list(replace))
+
+        # Remove promoted arguments
+        for index in sorted(tmp, reverse=True):
+            del main_file.body[1].params[index]
+            del self.args[index]
+            
 
         #ctree.browser_show_ast(main_file, 'tmp.png')
         # TODO: Figure out a better way to do this, inline function needs to appear before the fused function
@@ -210,11 +218,9 @@ class ArgReplacer(ast.NodeTransformer):
         ArgReplacer.unique_num += 1
 
     def visit_FunctionDecl(self, node):
-        param_copy = node.params[:]
         for i, index in enumerate(self.indices):
-            param = param_copy[index]
+            param = node.params[index]
             self.to_replace[param.name] = param.type.get_base_type()
-            node.params.pop(index - i)
 
         node.defn = map(self.visit, node.defn)
         return node
@@ -236,7 +242,7 @@ class UniqueNamer(ast.NodeTransformer):
     unique_num = 0
     def __init__(self, prev_seen):
         super(UniqueNamer, self).__init__()
-        self.unique_num += 1
+        UniqueNamer.unique_num += 1
         self.prev_seen = prev_seen
         self.seen = set()
         self.new_name_map = {}
@@ -368,16 +374,24 @@ c_sub = Sub()
 a = np.ones(12, dtype=np.float64)
 b = np.ones(12, dtype=np.float64)
 c = np.ones(12, dtype=np.float64)
-tmp = np.ones(12, dtype=np.float64)
-actual_d = np.ones(12, dtype=np.float64)
+tmp1 = np.ones(12, dtype=np.float64)
+tmp2 = np.ones(12, dtype=np.float64)
+tmp3 = np.ones(12, dtype=np.float64)
+d = np.ones(12, dtype=np.float64)
+e = np.ones(12, dtype=np.float64)
+actual_f = np.ones(12, dtype=np.float64)
 class Fuse(Fuser):
     def fuse(self):
-        c_add(a, b, tmp)
-        c_sub(tmp, c, actual_d)
+        c_add(a, b, tmp1)
+        c_add(tmp1, c, tmp2)
+        c_sub(tmp2, d, tmp3)
+        c_add(tmp3, e, actual_f)
 Fuse().fuse()
-tmp = py_add(a, b)
-expected_d = py_sub(tmp, c)
-np.testing.assert_array_equal(actual_d, expected_d)
+tmp1 = py_add(a, b)
+tmp2 = py_add(tmp1, c)
+e = py_sub(tmp2, d)
+expected_f = py_add(tmp3, e)
+np.testing.assert_array_equal(actual_f, expected_f)
 
 print("Success.")
 
