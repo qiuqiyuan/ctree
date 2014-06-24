@@ -42,7 +42,7 @@ install:
   - python setup.py install
 
   # install pycl
-  - git clone -b llvm-3.4 git://github.com/ucb-sejits/pycl.git ${TRAVIS_BUILD_DIR}/pycl
+  - git clone git://github.com/ucb-sejits/pycl.git ${TRAVIS_BUILD_DIR}/pycl
   - cd ${TRAVIS_BUILD_DIR}/pycl
   - python setup.py install
 
