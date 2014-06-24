@@ -21,7 +21,7 @@ before_install:
   - if [ ${TRAVIS_PYTHON_VERSION:0:1} == "2" ]; then export PATH=/home/travis/miniconda/bin:$PATH; else export PATH=/home/travis/miniconda3/bin:$PATH; fi
   - conda update --yes conda
   # Setup environment
-  - conda create -n travisci --yes python=${TRAVIS_PYTHON_VERSION:0:3} llvm numpy setuptools nose pycl
+  - conda create -n travisci --yes python=${TRAVIS_PYTHON_VERSION:0:3} llvm numpy setuptools nose
   - source activate travisci
   - sudo apt-get update -qq
   - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
@@ -33,13 +33,17 @@ install:
 
   # coverage and doc generator
   - pip install Sphinx coveralls coverage pygments
-    # - pip install --pre pycl
   - nosetests --version
   - coverage --version
 
   # install llvmpy
   - git clone -b llvm-3.4 git://github.com/llvmpy/llvmpy.git ${TRAVIS_BUILD_DIR}/llvmpy
   - cd ${TRAVIS_BUILD_DIR}/llvmpy
+  - python setup.py install
+
+  # install pycl
+  - git clone -b llvm-3.4 git://github.com/ucb-sejits/pycl.git ${TRAVIS_BUILD_DIR}/pycl
+  - cd ${TRAVIS_BUILD_DIR}/pycl
   - python setup.py install
 
   # install opentuner
