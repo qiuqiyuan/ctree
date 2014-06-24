@@ -38,13 +38,13 @@ install:
   - coverage --version
 
   # install llvmpy
-  - git clone -b llvm-3.4 git://github.com/llvmpy/llvmpy.git ${HOME}/llvmpy
-  - cd ${HOME}/llvmpy
+  - git clone -b llvm-3.4 git://github.com/llvmpy/llvmpy.git ${TRAVIS_BUILD_DIR}/llvmpy
+  - cd ${TRAVIS_BUILD_DIR}/llvmpy
   - python setup.py install
 
   # install opentuner
-  - git clone https://github.com/mbdriscoll/opentuner.git ${HOME}/opentuner
-  - cd ${HOME}/opentuner
+  - git clone https://github.com/mbdriscoll/opentuner.git ${TRAVIS_BUILD_DIR}/opentuner
+  - cd ${TRAVIS_BUILD_DIR}/opentuner
   - sudo apt-get install `cat debian-packages-deps | tr '\n' ' '`
   - "if [[ \"x$PYTHON_VERSION\" -eq \"x(2.7)\" ]]; then pip install -r python-packages; fi"
   - export PYTHONPATH=`pwd`:$PYTHONPATH
@@ -56,7 +56,7 @@ install:
 script:
 
   # run test suite from home directory to verify installation
-  - cd ${HOME}
+  - cd ${TRAVIS_BUILD_DIR}
   - nosetests --where=${TRAVIS_BUILD_DIR}/test
 
   # run test suite again from build dir to get coverage info
