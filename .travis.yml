@@ -2,20 +2,29 @@ language: python
 
 python:
   - "2.7"
-  - "3.2"
-  - "3.3"
+  # - "3.2"
+  # - "3.3"
 
 env:
   global:
     # encrypted OAuth token so Travis can commit docs back to Github
     - secure: "QBB2KT4EFUdSkH9fjo5J/02zuZlD0FbVsKwYJgW6c4INp1UY/nx0nrsgjPSZQMD2HBztdfEZInugoVrOJwXBzWJ5Ioc19T9oYhnzaIF6oJRo1mTYDhragvdwiLfb0AyylGq7bgP4lgoMBtE1Oxauf0rKVEYiVeEhvHJup/di6A4="
   matrix:
-    - LLVM_VERSION=3.3
+    - LLVM_VERSION=3.4
 
 before_install:
 
+  # Install Miniconda
+  - if [ ${TRAVIS_PYTHON_VERSION:0:1} == "2" ]; then wget http://repo.continuum.io/miniconda/Miniconda-3.5.2-Linux-x86_64.sh -O miniconda.sh; else wget http://repo.continuum.io/miniconda/Miniconda3-3.5.2-Linux-x86_64.sh -O miniconda.sh; fi
+  - chmod +x miniconda.sh
+  - ./miniconda.sh -b
+  - if [ ${TRAVIS_PYTHON_VERSION:0:1} == "2" ]; then export PATH=/home/travis/miniconda/bin:$PATH; else export PATH=/home/travis/miniconda3/bin:$PATH; fi
+  - conda update --yes conda
+  # Setup environment
+  - conda create -n travisci --yes python=${TRAVIS_PYTHON_VERSION:0:3} llvm numpy setuptools nose pygments Sphinx coverage
+  - source activate travisci
   - sudo apt-get update -qq
-  - sudo apt-get install -qq llvm-$LLVM_VERSION
+  - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
 
 
 install:
@@ -23,18 +32,23 @@ install:
   - export PYTHON_VERSION=$(python -c 'import sys; print(sys.version_info[0:2])')
 
   # coverage and doc generator
-  - pip install numpy Sphinx coveralls coverage nose pygments
+  - pip install Sphinx coveralls coverage
   - nosetests --version
   - coverage --version
 
   # install llvmpy
-  - git clone git://github.com/llvmpy/llvmpy.git ${HOME}/llvmpy
-  - cd ${HOME}/llvmpy
-  - LLVM_CONFIG_PATH=/usr/bin/llvm-config-$LLVM_VERSION python setup.py install
+  - git clone -b llvm-3.4 git://github.com/llvmpy/llvmpy.git ${TRAVIS_BUILD_DIR}/llvmpy
+  - cd ${TRAVIS_BUILD_DIR}/llvmpy
+  - python setup.py install
+
+  # install pycl
+  - git clone git://github.com/ucb-sejits/pycl.git ${TRAVIS_BUILD_DIR}/pycl
+  - cd ${TRAVIS_BUILD_DIR}/pycl
+  - python setup.py install
 
   # install opentuner
-  - git clone https://github.com/mbdriscoll/opentuner.git ${HOME}/opentuner
-  - cd ${HOME}/opentuner
+  - git clone https://github.com/mbdriscoll/opentuner.git ${TRAVIS_BUILD_DIR}/opentuner
+  - cd ${TRAVIS_BUILD_DIR}/opentuner
   - sudo apt-get install `cat debian-packages-deps | tr '\n' ' '`
   - "if [[ \"x$PYTHON_VERSION\" -eq \"x(2.7)\" ]]; then pip install -r python-packages; fi"
   - export PYTHONPATH=`pwd`:$PYTHONPATH
@@ -46,7 +60,7 @@ install:
 script:
 
   # run test suite from home directory to verify installation
-  - cd ${HOME}
+  - cd ${TRAVIS_BUILD_DIR}
   - nosetests --where=${TRAVIS_BUILD_DIR}/test
 
   # run test suite again from build dir to get coverage info
@@ -62,6 +76,8 @@ after_success:
   # only build docs using Python 2.7
   - "if [[ \"x$PYTHON_VERSION\" != \"x(2, 7)\" ]]; then echo 'Not Python 2.7; skipping doc build.'; exit 0; fi"
 
+  # Deactivate conda env
+  - source deactivate
   # publish coverage report
   - coveralls
 
@@ -88,3 +104,6 @@ after_success:
 
   # commit new docs to ctree-docs
   - git push origin gh-pages
+
+notifications:
+  slack: ucb-sejits:cPZxBunxagWZ763mcsIXOV0W
