@@ -1,9 +1,10 @@
 __author__ = 'leonardtruong'
+  os.getcwd()
 
 from stencil_code.stencil_kernel import StencilKernel
 from stencil_code.stencil_grid import StencilGrid
 from ctree.frontend import get_ast
-from ctree.templates.nodes import StringTemplate
+import ctree
 
 import ast
 import pycl as cl
@@ -126,47 +127,59 @@ class Fusable(object):
 
         tree.body[0].backend_transform()
         tree.body[1].backend_transform()
-        kernel = tree.body[0].function_decl.files[0].body[0]
+        exit(1)
         kernel = StringTemplate("""
-        __kernel void stencil_kernel(__global const float* in_grid, __global float* out_grid, __local float* block) {
+        __kernel void stencil_kernel(__global const float* in_grid, __global
+        float* out_grid, __local float* block, __local float* block2) {
+            if (get_global_id(0) > 1024 || get_global_id(1) > 1024) return;
             int id0 = get_global_id(0) + 2;
             int global_index = id0;
-            __local float block2[16];
             #define local_array_macro(d0, d1) ((d1) * (get_local_size(0) + 4) + (d0))
             #define local_array_macro2(d0, d1) ((d1) * (get_local_size(0) + 2) + (d0))
-            #define global_array_macro(d0, d1) ((d1) * (get_global_size(0) + 4) + (d0))
-            for (int d0 = get_local_id(0); d0 < get_local_size(0) + 4; d0 += get_local_size(0)) {
-                for (int d1 = get_local_id(1); d1 < get_local_size(1) + 4; d1 += get_local_size(1)) {
-                    block[local_array_macro(d0, d1)] = in_grid[global_array_macro(d0 + get_group_id(0) * get_local_size(0), d1 + get_group_id(1) * get_local_size(1))];
-                }
+            // for (int d0 = get_local_id(0); d0 < get_local_size(0) + 4; d0 += get_local_size(0)) {
+            //     for (int d1 = get_local_id(1); d1 < get_local_size(1) + 4; d1 += get_local_size(1)) {
+            //         block[local_array_macro(d0, d1)] = in_grid[global_array_macro(d0 + get_group_id(0) * get_local_size(0), d1 + get_group_id(1) * get_local_size(1))];
+            //     }
+            // }
+            #define global_array_macro(d0, d1) ((d1) * (get_global_size(0) + 2) + (d0))
+
+            for (int tid = get_local_id(1) * get_local_size(0) + get_local_id(0); tid < (get_local_size(0) + 4) * (get_local_size(1) + 4); tid += get_local_size(0) * get_local_size(1)) {
+                int local_x = tid % (get_local_size(0) + 4);
+                int glb_x = local_x + get_group_id(0) * (get_local_size(0));
+                int glb_y = (tid - local_x) / (get_local_size(0) + 4) + get_group_id(1) * (get_local_size(1));
+                block[tid] = in_grid[global_array_macro(glb_x, glb_y)];
             }
 
             barrier(CLK_LOCAL_MEM_FENCE);
-            for (int d0 = get_local_id(0); d0 < get_local_size(0) + 2; d0 += get_local_size(0)) {
-                                for (int d1 = get_local_id(1); d1 < get_local_size(1) + 2; d1 += get_local_size(1)) {
-                                    float tmp = 0.0;
-                                    tmp += block[local_array_macro(d0 + 1, d1)];
-                                    tmp += block[local_array_macro(d0 + 1, d1 + 2)];
-                                    tmp += block[local_array_macro(d0, d1 + 1)];
-                                    tmp += block[local_array_macro(d0 + 2, d1 + 1)];
-                                    block2[local_array_macro2(d0, d1)] += tmp;
-                                }
+
+            for (int tid = get_local_id(1) * get_local_size(0) + get_local_id(0); tid < (get_local_size(0) + 2) * (get_local_size(1) + 2); tid += get_local_size(0) * get_local_size(1)) {
+                int local_x = tid % (get_local_size(0) + 2);
+                int local_y = (tid - local_x) / (get_local_size(0) + 2);
+                block2[tid] = 0;
+                block2[tid] += block[local_array_macro(local_x + 1, local_y)];
+                block2[tid] += block[local_array_macro(local_x + 1, local_y + 2)];
+                block2[tid] += block[local_array_macro(local_x, local_y + 1)];
+                block2[tid] += block[local_array_macro(local_x + 2, local_y + 1)];
+            //for (int d0 = get_local_id(0); d0 < get_local_size(0) + 2; d0 += get_local_size(0)) {
+            //    for (int d1 = get_local_id(1); d1 < get_local_size(1) + 2; d1 += get_local_size(1)) {
+            //        float tmp = 0.0;
+            //        tmp += block[local_array_macro(d0 + 1, d1)];
+            //        tmp += block[local_array_macro(d0 + 1, d1 + 2)];
+            //        tmp += block[local_array_macro(d0, d1 + 1)];
+            //        tmp += block[local_array_macro(d0 + 2, d1 + 1)];
+            //        block2[local_array_macro2(d0, d1)] = tmp;
+            //    }
+            //}
             }
             barrier(CLK_LOCAL_MEM_FENCE);
-            float tmp = 0.0;
-           tmp = block2[local_array_macro2(get_local_id(0) + 1, get_local_id(1))];
-           tmp += block2[local_array_macro2(get_local_id(0) + 1, get_local_id(1) + 2)];
-           tmp += block2[local_array_macro2(get_local_id(0), get_local_id(1) + 1)];
-           tmp += block2[local_array_macro2(get_local_id(0) + 2, get_local_id(1) + 1)];
-           out_grid[global_array_macro(get_global_id(0) + 2, get_global_id(1) + 2)] = tmp;
+            out_grid[global_array_macro(get_global_id(0) + 2, get_global_id(1) + 2)] += block2[local_array_macro2(get_local_id(0) + 1, get_local_id(1))];
+            out_grid[global_array_macro(get_global_id(0) + 2, get_global_id(1) + 2)] += block2[local_array_macro2(get_local_id(0) + 1, get_local_id(1) + 2)];
+            out_grid[global_array_macro(get_global_id(0) + 2, get_global_id(1) + 2)] += block2[local_array_macro2(get_local_id(0), get_local_id(1) + 1)];
+            out_grid[global_array_macro(get_global_id(0) + 2, get_global_id(1) + 2)] += block2[local_array_macro2(get_local_id(0) + 2, get_local_id(1) + 1)];
         }
         """)
-        print(kernel.codegen())
-        gpus = cl.clGetDeviceIDs(device_type=cl.cl_device_type.CL_DEVICE_TYPE_GPU)
-        context = cl.clCreateContext([gpus[1]])
-        queue = cl.clCreateCommandQueue(context)
 
-        width = 16
+        width = 2**10 + 2
         out_grid = StencilGrid([width, width])
         out_grid.ghost_depth = 1
         in_grid = StencilGrid([width, width])
@@ -175,28 +188,40 @@ class Fusable(object):
         for x in in_grid.interior_points():
             in_grid[x] = 1.0
 
-        local = 2
+        gpus = cl.clGetDeviceIDs(device_type=cl.cl_device_type.CL_DEVICE_TYPE_GPU)
+        context = cl.clCreateContext([gpus[1]])
+        queue = cl.clCreateCommandQueue(context)
+        local = 32
         program = cl.clCreateProgramWithSource(context, kernel.codegen()).build()
         kernel = program['stencil_kernel']
+        events = []
 
         in_buf, evt = cl.buffer_from_ndarray(queue, in_grid.data)
-        print(in_grid.data.dtype)
-        evt.wait()
         kernel.setarg(0, in_buf, ct.sizeof(cl.cl_mem))
+        events.append(evt)
 
         out_buf, evt = cl.buffer_from_ndarray(queue, out_grid.data)
-        evt.wait()
         kernel.setarg(1, out_buf, ct.sizeof(cl.cl_mem))
+        events.append(evt)
 
-        local_mem_size = ct.sizeof(ct.c_float) * (local + 4) * (local + 4)
-        local_mem = cl.localmem(local_mem_size)
-        kernel.setarg(2, local_mem, local_mem_size)
+        block_size = ct.sizeof(ct.c_float) * (local + 4) * (local + 4)
+        block = cl.localmem(block_size)
+        kernel.setarg(2, block, block_size)
 
-        evt = cl.clEnqueueNDRangeKernel(queue, kernel, (width - 4, width - 4), (local, local))
-        evt.wait()
+        block2_size = ct.sizeof(ct.c_float) * (local + 2) * (local + 2)
+        block2 = cl.localmem(block2_size)
+        kernel.setarg(3, block2, block2_size)
+
+        cl.clWaitForEvents(*events)
+        total = 0
+        for i in range(10):
+            with Timer() as t:
+                evt = cl.clEnqueueNDRangeKernel(queue, kernel, (width - 2, width - 2), (local, local))
+                evt.wait()
+            total += t.interval
+        print(total / 10)
 
         ary, evt = cl.buffer_to_ndarray(queue, out_buf, out_grid.data)
-        print(ary)
         evt.wait()
         return ary
 
@@ -229,7 +254,18 @@ class Kernel(StencilKernel):
             for y in in_grid.neighbors(x, 1):
                 out_grid[x] += in_grid[y]
 
-width = 16
+import time
+
+class Timer:
+    def __enter__(self):
+        self.start = time.clock()
+        return self
+
+    def __exit__(self, *args):
+        self.end = time.clock()
+        self.interval = self.end - self.start
+
+width = 2**10 + 2
 kernel = Kernel()
 b = StencilGrid([width, width])
 b.ghost_depth = 1
@@ -250,9 +286,11 @@ class Fuse(Fusable):
         stencil_kernel.kernel(b, c)
 
 actual = Fuse().fuse()
-stencil_kernel.kernel(a, b)
-stencil_kernel.kernel(b, c)
-print c
+exit(0)
+with Timer() as t:
+    stencil_kernel.kernel(a, b)
+    stencil_kernel.kernel(b, c)
+print t.interval
 
 np.testing.assert_array_equal(actual[2:-2, 2:-2], c.data[2:-2, 2:-2])
 print 'SUCCESS'
