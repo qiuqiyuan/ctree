@@ -95,7 +95,7 @@ class TestOclMacros(unittest.TestCase):
                                       1, 0, 0, 0)
         self.assertEqual(
             tree.codegen(),
-            """{
+"""{
     size_t global_size = 0;
     size_t local_size = 0;
     clEnqueueNDRangeKernel(tmp, kernel, 1, 0, & global_size, & local_size, 0, NULL, NULL);

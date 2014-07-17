@@ -12,10 +12,14 @@ class CDotGenLabeller(DotGenLabeller):
     """
 
     def visit_SymbolRef(self, node):
+        s = r""
         if node.type:
-            return r"%s %s" % (node.type, node.name)
-        else:
-            return r"%s" % (node.name)
+            s += r"%s " % (node.type)
+        if node._global:
+            s += r"__global "
+        if node._local:
+            s += r"__local "
+        return s + r"%s" % (node.name)
 
     def visit_FunctionDecl(self, node):
         s = r""

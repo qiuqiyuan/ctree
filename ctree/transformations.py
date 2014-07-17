@@ -35,6 +35,7 @@ class PyBasicConversions(NodeTransformer):
         ast.Mult: Op.Mul,
         ast.Sub: Op.Sub,
         ast.Lt: Op.Lt,
+        ast.Div: Op.Div,
         # TODO list the rest
     }
 

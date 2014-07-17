@@ -20,6 +20,18 @@ import pycl as cl
 import ctypes as ct
 import numpy as np
 
+import time
+
+class Timer:
+    def __enter__(self):
+        self.start = time.clock()
+        return self
+
+    def __exit__(self, *args):
+        self.end = time.clock()
+        self.interval = self.end - self.start
+
+
 ###########################################################
 # Create a simple kernel to fuse
 
@@ -29,7 +41,7 @@ class Kernel(StencilKernel):
             for y in in_grid.neighbors(x, 1):
                 out_grid[x] += in_grid[y]
 
-width = 2**10 + 2
+width = 2**12 + 2
 stencil_kernel = Kernel(backend='ocl')
 b = StencilGrid([width, width])
 b.ghost_depth = 1
@@ -38,8 +50,10 @@ a.ghost_depth = 1
 c = StencilGrid([width, width])
 c.ghost_depth = 1
 
-for x in a.interior_points():
-    a[x] = 1.0
+# a.data = np.ones([width, width])
+a.data = np.ones([width, width], dtype=np.float32)
+# for x in a.interior_points():
+#     a[x] = 1.0
 
 ###########################################################
 
@@ -78,86 +92,112 @@ tree = get_ast(fuse)
 SemanticModelBuilder().visit(tree)
 # Remove fuse function def node
 tree.body = tree.body[0].body
+
+num_fusions = len(tree.body)
+
 for t in tree.body:
     t.backend_transform()
 # ctree.browser_show_ast(tree, 'tmp.png')
 kernel = tree.body[0].function_decl.files[0].body[0]
 kernel.defn.extend(tree.body[1].function_decl.files[0].body[0].defn[3:])
-kernel.params.append(SymbolRef('block2', ct.POINTER(ct.c_float)(), _local=True))
-# kernel.defn[4].right.left.right.value *= 2
-kernel.defn[0].body = '((d1 + 1) * (get_local_size(0) + 4) + d0 + 1)'
-kernel.defn[4].right.right.right.value *= 2
-kernel.defn[6].body[0].right.right.right.value *= 2
-assigns = kernel.defn[10:14]
+
+# Update our global indices to account for fusion padding
+kernel.defn[2].right.left.left.right.value *= num_fusions
+kernel.defn[2].right.right.right.value *= num_fusions
+
+# TODO: This needs to check validity of fusion operation, i.e. do source and
+# sinks match.
+for i in range(1, num_fusions):
+    kernel.params.append(SymbolRef('block%d' % i, ct.POINTER(ct.c_float)(), _local=True))
+
+# Update expanded block sizes
+# TODO: For some reason these constants are linked, updating one updates both
+kernel.defn[4].right.right.right.value *= num_fusions
+kernel.defn[6].body[0].right.right.right.value *= num_fusions
+
+# Move the first stencil operation into the shared memory load block of the
+# second stencil.  The operation is modified to output into local memory instead
+# of global memory, as well as updating it's indexing scheme into the original
+# shared memory block since our padding has changed.
+stencil_op = kernel.defn[10:14]
 del kernel.defn[10:14]
-for line in assigns:
-    line.target.left = SymbolRef('block2')
+for line in stencil_op:
+    line.target.left = SymbolRef('block1')
     line.target.right = SymbolRef('tid')
     line.value.right.func = 'local_array_macro2'
     for arg in line.value.right.args:
         arg.left = SymbolRef('i_' + arg.left.name[-1])
-assigns.insert(0, Assign(SymbolRef('block2[tid]'), Constant(0)))
+stencil_op.insert(0, Assign(SymbolRef('block1[tid]'), Constant(0)))
+
+# Remove the old shared memory load
 del kernel.defn[13].body[-1]
-kernel.defn[13].body.extend(assigns)
+
+# Insert the modified stencil operations.
+kernel.defn[13].body.extend(stencil_op)
+
+# Remove the redecleration of variables
+# TODO: This should only redefine block_size as the others are unchanged.
 for decl in kernel.defn[10:13]:
     decl.left.type = None
+
+# Rename our final stencil operatiosn to use the new shared memory block from
+# the first stencil
 for op in kernel.defn[17:]:
-    op.value.left.name = 'block2'
-    op.value.right.func = 'local_array_macro3'
-    op.target.right = Add(op.target.right, Constant(1027))
+    op.value.left.name = 'block1'
 del kernel.defn[8:10]
 kernel.defn.insert(1, StringTemplate("#define local_array_macro2(d0, d1) ((d1 + 1) * (get_local_size(0) + 4) + (d0 + 1))"))
-kernel.defn.insert(1, StringTemplate("#define local_array_macro3(d0, d1) ((d1) * (get_local_size(0) + 2) + (d0))"))
 
-print(kernel)
+# print(kernel)
 
 ###########################################################
 
-width = 2**10 + 2
 out_grid = StencilGrid([width, width])
 out_grid.ghost_depth = 1
 in_grid = StencilGrid([width, width])
 in_grid.ghost_depth = 1
 
-for x in in_grid.interior_points():
-    in_grid[x] = 1.0
+# for x in in_grid.interior_points():
+#     in_grid[x] = 1.0
+in_grid.data = np.ones([width, width], dtype=np.float32)
+with Timer() as t:
+    gpus = cl.clGetDeviceIDs(device_type=cl.cl_device_type.CL_DEVICE_TYPE_GPU)
+    context = cl.clCreateContext([gpus[1]])
+    queue = cl.clCreateCommandQueue(context)
+    local = 32
+    program = cl.clCreateProgramWithSource(context, kernel.codegen()).build()
+    kernel = program['stencil_kernel']
+    events = []
 
-gpus = cl.clGetDeviceIDs(device_type=cl.cl_device_type.CL_DEVICE_TYPE_GPU)
-context = cl.clCreateContext([gpus[1]])
-queue = cl.clCreateCommandQueue(context)
-local = 32
-program = cl.clCreateProgramWithSource(context, kernel.codegen()).build()
-kernel = program['stencil_kernel']
-events = []
+    in_buf, evt = cl.buffer_from_ndarray(queue, in_grid.data)
+    kernel.setarg(0, in_buf, ct.sizeof(cl.cl_mem))
+    events.append(evt)
 
-in_buf, evt = cl.buffer_from_ndarray(queue, in_grid.data)
-kernel.setarg(0, in_buf, ct.sizeof(cl.cl_mem))
-events.append(evt)
+    out_buf, evt = cl.buffer_from_ndarray(queue, out_grid.data)
+    kernel.setarg(1, out_buf, ct.sizeof(cl.cl_mem))
+    events.append(evt)
 
-out_buf, evt = cl.buffer_from_ndarray(queue, out_grid.data)
-kernel.setarg(1, out_buf, ct.sizeof(cl.cl_mem))
-events.append(evt)
+    block_size = ct.sizeof(ct.c_float) * (local + 4) * (local + 4)
+    block = cl.localmem(block_size)
+    kernel.setarg(2, block, block_size)
 
-block_size = ct.sizeof(ct.c_float) * (local + 4) * (local + 4)
-block = cl.localmem(block_size)
-kernel.setarg(2, block, block_size)
+    block2_size = ct.sizeof(ct.c_float) * (local + 2) * (local + 2)
+    block2 = cl.localmem(block2_size)
+    kernel.setarg(3, block2, block2_size)
 
-block2_size = ct.sizeof(ct.c_float) * (local + 2) * (local + 2)
-block2 = cl.localmem(block2_size)
-kernel.setarg(3, block2, block2_size)
+    cl.clWaitForEvents(*events)
+    evt = cl.clEnqueueNDRangeKernel(queue, kernel, (width - 2, width - 2), (local, local))
+    evt.wait()
 
-cl.clWaitForEvents(*events)
-evt = cl.clEnqueueNDRangeKernel(queue, kernel, (width - 2, width - 2), (local, local))
-evt.wait()
+    ary, evt = cl.buffer_to_ndarray(queue, out_buf, out_grid.data)
+    evt.wait()
+print("Fused time: %f" % t.interval)
 
-ary, evt = cl.buffer_to_ndarray(queue, out_buf, out_grid.data)
-evt.wait()
+# print(ary[2:-2, 2:-2])
 
-print(ary[2:-2, 2:-2])
+with Timer() as u:
+    stencil_kernel.kernel(a, b)
+    stencil_kernel.kernel(b, c)
+print("Unfused time: %f" % u.interval)
 
-stencil_kernel.kernel(a, b)
-stencil_kernel.kernel(b, c)
-
-import numpy
-numpy.testing.assert_array_equal(ary[2:-2, 2:-2], c[2:-2, 2:-2])
+np.testing.assert_array_equal(ary[2:-2, 2:-2], c[2:-2, 2:-2])
 print('PASSED')
