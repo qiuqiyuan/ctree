@@ -57,6 +57,7 @@ setup(
         'ctree.omp',
         'ctree.py',
         'ctree.meta',
+        'ctree.meta.basic_block',
         'ctree.np',
         'ctree.simd',
         'ctree.templates',
