@@ -1,0 +1,2 @@
+class MetaSpecializer(object):
+    pass
