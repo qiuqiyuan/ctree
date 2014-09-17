@@ -75,3 +75,26 @@ class TestBasicBlockBuilder(unittest.TestCase):
         self._check_args(basic_block[1].value.args, ['_t1', 'c'])
         self.assertIsInstance(basic_block[2], Return)
         self.assertEqual(basic_block[2].value.name, '_t0')
+
+    def test_unpack_precedence(self):
+        def func(a, b):
+            return a + b * c
+
+        tree = get_ast(func)
+        basic_block = get_basic_block(tree)
+        print(basic_block)
+        self.assertEqual(len(basic_block), 3)
+        self.assertEqual(basic_block[0].target.name, '_t1')
+        self.assertEqual(
+            basic_block[0].value.op,
+            'b.__mul__'
+        )
+        self._check_args(basic_block[0].value.args, ['b', 'c'])
+        self.assertEqual(basic_block[1].target.name, '_t0')
+        self.assertEqual(
+            basic_block[1].value.op,
+            'a.__add__'
+        )
+        self._check_args(basic_block[1].value.args, ['a', '_t1'])
+        self.assertIsInstance(basic_block[2], Return)
+        self.assertEqual(basic_block[2].value.name, '_t0')
