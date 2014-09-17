@@ -37,23 +37,6 @@ class Param(BasicBlockNode):
         return self._name
 
 
-class Op(BasicBlockNode):
-    def __init__(self, op, args):
-        self._op = op
-        self._args = args
-
-    @property
-    def op(self):
-        return self._op
-
-    @property
-    def args(self):
-        return self._args[:]
-
-    def __str__(self):
-        return "{}({})".format(str(self._op), ", ".join(map(str, self._args)))
-
-
 class Return(BasicBlockNode):
     def __init__(self, value):
         self._value = value
@@ -81,3 +64,22 @@ class Assign(BasicBlockNode):
 
     def __str__(self):
         return "{} = {}".format(str(self._target), str(self._value))
+
+
+class FunctionCall(BasicBlockNode):
+    def __init__(self, func, args):
+        self._func = func
+        self._args = args
+
+    @property
+    def func(self):
+        return self._func
+
+    @property
+    def args(self):
+        return self._args[:]
+
+    def __str__(self):
+        return "{}({})".format(str(self._func), ", ".join(map(str, self._args)))
+    
+            

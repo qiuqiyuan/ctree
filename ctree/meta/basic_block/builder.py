@@ -1,6 +1,6 @@
 import ast
 from functools import reduce
-from .nodes import Assign, Symbol, Op, Return, Param, Constant
+from .nodes import Assign, Symbol, Return, Param, Constant, FunctionCall
 import sys
 
 
@@ -52,6 +52,8 @@ class BlockDecomposer(object):
             tmp = self.gen_tmp()
             body = self.visit(expr.value, tmp)
             body.append(Return(tmp))
+        elif isinstance(expr, ast.Name):
+            return Symbol(expr.id)
         elif isinstance(expr, ast.BinOp):
             body = []
             operands = []
@@ -74,10 +76,30 @@ class BlockDecomposer(object):
                 op = operands[0].name + '.__mul__'
             else:
                 raise Exception("Unsupported operation")
-            body.append(Assign(curr_target, Op(op, operands)))
+            body.append(Assign(curr_target, FunctionCall(op, operands)))
         elif isinstance(expr, ast.Assign):
             target = Symbol(expr.targets[0].id)
             body = self.visit(expr.value, target)
+        elif isinstance(expr, ast.Call):
+            body = []
+            args = []
+            for arg in expr.args:
+                val = self.visit(arg)
+                if isinstance(val, list):
+                    body.extend(val)
+                    args.append(val[-1].target)
+                elif isinstance(val, (Symbol, Constant)):
+                    args.append(val)
+                else:
+                    raise Exception("Call argument returned\
+                                     unsupported type {}".format(type(val)))
+            if curr_target is not None:
+                body.append(Assign(curr_target,
+                                   FunctionCall(self.visit(expr.func),
+                                                [self.visit(arg) for arg in expr.args])))
+            else:
+                body.append(FunctionCall(self.visit(expr.func),
+                                         [self.visit(arg) for arg in expr.args]))
         else:
             raise Exception("Unsupported expression {}".format(expr))
         return body
