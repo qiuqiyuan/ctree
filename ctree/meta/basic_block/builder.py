@@ -75,7 +75,7 @@ class BlockDecomposer(object):
             elif isinstance(expr.op, ast.Div):
                 op = operands[0].name + '.__mul__'
             else:
-                raise Exception("Unsupported operation")
+                raise Exception("Unsupported BinOp {}".format(expr.op))
             body.append(Assign(curr_target, FunctionCall(op, operands)))
         elif isinstance(expr, ast.Assign):
             target = Symbol(expr.targets[0].id)
