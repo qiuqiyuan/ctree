@@ -84,6 +84,4 @@ def get_basic_block(module):
     params = [Param(arg.arg) for arg in func.args.args]
     body = map(decomposer.visit, func.body)
     body = reduce(lambda x, y: x + y, body, [])
-    block = BasicBlock(func.name, params, body)
-    print(block)
-    return block
+    return BasicBlock(func.name, params, body)
