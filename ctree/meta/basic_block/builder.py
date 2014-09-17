@@ -76,7 +76,7 @@ class BlockDecomposer(object):
                 op = operands[0].name + '.__mul__'
             else:
                 raise Exception("Unsupported BinOp {}".format(expr.op))
-            body.append(Assign(curr_target, FunctionCall(op, operands)))
+            body.append(Assign(curr_target, FunctionCall(Symbol(op), operands)))
         elif isinstance(expr, ast.Assign):
             target = Symbol(expr.targets[0].id)
             body = self.visit(expr.value, target)
@@ -86,8 +86,10 @@ class BlockDecomposer(object):
             for arg in expr.args:
                 val = self.visit(arg)
                 if isinstance(val, list):
+                    tmp = self.gen_tmp()
+                    val = self.visit(arg, tmp)
                     body.extend(val)
-                    args.append(val[-1].target)
+                    args.append(tmp)
                 elif isinstance(val, (Symbol, Constant)):
                     args.append(val)
                 else:
@@ -95,11 +97,9 @@ class BlockDecomposer(object):
                                      unsupported type {}".format(type(val)))
             if curr_target is not None:
                 body.append(Assign(curr_target,
-                                   FunctionCall(self.visit(expr.func),
-                                                [self.visit(arg) for arg in expr.args])))
+                                   FunctionCall(self.visit(expr.func), args)))
             else:
-                body.append(FunctionCall(self.visit(expr.func),
-                                         [self.visit(arg) for arg in expr.args]))
+                body.append(FunctionCall(self.visit(expr.func), args))
         else:
             raise Exception("Unsupported expression {}".format(expr))
         return body
