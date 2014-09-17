@@ -62,11 +62,15 @@ class BlockDecomposer(object):
                     operands.append(Constant(operand.n))
                 else:
                     tmp = self.gen_tmp()
-                    body.append(self.visit(operand, tmp))
+                    body.extend(self.visit(operand, tmp))
                     operands.append(tmp)
             if isinstance(expr.op, ast.Add):
                 op = operands[0].name + '.__add__'
             elif isinstance(expr.op, ast.Mult):
+                op = operands[0].name + '.__mul__'
+            elif isinstance(expr.op, ast.Sub):
+                op = operands[0].name + '.__mul__'
+            elif isinstance(expr.op, ast.Div):
                 op = operands[0].name + '.__mul__'
             else:
                 raise Exception("Unsupported operation")
