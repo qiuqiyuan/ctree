@@ -21,7 +21,6 @@ class BasicBlock(object):
         return self._body[item]
 
     def __repr__(self):
-
         return """
 BasicBlock
   Name: {name}
@@ -31,7 +30,6 @@ BasicBlock
         """.format(name=self._name,
                    params=", ".join(map(str, self._params)),
                    body="\n    ".join(map(str, self._body)))
-        return string
 
 
 class TmpGenerator(object):
