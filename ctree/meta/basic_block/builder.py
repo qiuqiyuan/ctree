@@ -20,10 +20,16 @@ class BasicBlock(object):
         return self._body[item]
 
     def __repr__(self):
-        string = "BasicBlock\n"
-        string += "  Name: {}\n".format(self._name)
-        string += "  Params: {}\n".format(", ".join(map(str, self._params)))
-        string += "  Body:\n    {}".format("\n    ".join(map(str, self._body)))
+
+        return """
+BasicBlock
+  Name: {name}
+  Params: {params}
+  Body:
+    {body}
+        """.format(name=self._name,
+                   params=", ".join(map(str, self._params)),
+                   body="\n    ".join(map(str, self._body)))
         return string
 
 
