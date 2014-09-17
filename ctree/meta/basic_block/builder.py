@@ -1,6 +1,7 @@
 import ast
 from functools import reduce
 from .nodes import Assign, Symbol, Op, Return, Param, Constant
+import sys
 
 
 class BasicBlock(object):
@@ -81,7 +82,10 @@ class BlockDecomposer(object):
 def get_basic_block(module):
     func = module.body[0]
     decomposer = BlockDecomposer()
-    params = [Param(arg.arg) for arg in func.args.args]
+    if sys.version_info > (3, 0):
+        params = [Param(arg.arg) for arg in func.args.args]
+    else:
+        params = [Param(arg.id) for arg in func.args.args]
     body = map(decomposer.visit, func.body)
     body = reduce(lambda x, y: x + y, body, [])
     return BasicBlock(func.name, params, body)
