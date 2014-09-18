@@ -4,11 +4,12 @@ import sys
 from ctree.jit import LazySpecializedFunction
 
 
-def eval_in_env(expr, env):
+def eval_in_env(env, expr):
     if isinstance(expr, ast.Name):
         return env[expr.id]
     elif isinstance(expr, ast.Attribute):
         return getattr(env[expr.value.id], expr.attr)
+    raise Exception("Unhandled type for eval_in_env {}".format(type(expr)))
 
 
 def str_dump(item):
@@ -26,7 +27,8 @@ def str_dump(item):
         return str(item.n)
     elif isinstance(item, ast.Name):
         return item.id
-    raise Exception("Unsupport type for dumping {}: {}".format(type(item), item))
+    raise Exception("Unsupport type for dumping {}: {}".format(type(item),
+                                                               item))
 
 
 class BasicBlock(object):
@@ -44,6 +46,8 @@ class BasicBlock(object):
         composable_statements = []
         composable_blocks = []
         for statement in self.body:
+            if isinstance(statement, ast.Assign):
+                print(eval_in_env(env, statement.value.func))
             if isinstance(statement, ast.Assign) and \
                isinstance(statement.value, ast.Call) and \
                isinstance(eval_in_env(env, statement.value.func),
@@ -152,8 +156,11 @@ class BlockDecomposer(object):
                     raise Exception("Call argument returned\
                                      unsupported type {}".format(type(val)))
             if curr_target is not None:
-                body.append(ast.Assign([curr_target],
-                                       ast.Call(self.visit(expr.func), args, [], None, None)))
+                body.append(ast.Assign(
+                    [curr_target],
+                    ast.Call(self.visit(expr.func), args, [], None, None)
+                    )
+                )
             else:
                 body.append(ast.Call(self.visit(expr.func), args))
         else:

@@ -191,6 +191,9 @@ class TestLSF(LazySpecializedFunction):
 
 class TestComposableBlocks(unittest.TestCase):
     def test_no_composable(self):
+        a = 3
+        b = 1
+
         def func(a, b):
             return a + b
 
@@ -212,5 +215,5 @@ class TestComposableBlocks(unittest.TestCase):
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
         basic_block.find_composable_blocks(dict(globals(), **locals()))
-        self.assertEqual(len(basic_block.composable_blocks), 1)
         print(basic_block)
+        self.assertEqual(len(basic_block.composable_blocks), 1)
