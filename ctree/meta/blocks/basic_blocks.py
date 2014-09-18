@@ -5,20 +5,23 @@ import sys
 
 
 class BasicBlock(object):
-    def __init__(self, name, params, body):
-        self._name = name
-        self._params = params
-        self._body = body
-
-    @property
-    def body(self):
-        return self._body
+    def __init__(self, name, params, body, composable_blocks=None):
+        self.name = name
+        self.params = params
+        self.body = body
+        if composable_blocks is None:
+            self.composable_blocks = []
+        else:
+            self.composable_blocks = composable_blocks
 
     def __len__(self):
         return len(self._body)
 
     def __getitem__(self, item):
         return self._body[item]
+
+    def __str__(self):
+        return self.__repr__()
 
     def __repr__(self):
         return """
@@ -34,11 +37,11 @@ BasicBlock
 
 class BlockDecomposer(object):
     def __init__(self):
-        self._curr_tmp = -1
+        self.__curr_tmp = -1
 
     def gen_tmp(self):
-        self._curr_tmp += 1
-        return Symbol("_t{}".format(self._curr_tmp))
+        self.__curr_tmp += 1
+        return Symbol("_t{}".format(self.__curr_tmp))
 
     def visit(self, expr, curr_target=None):
         if isinstance(expr, ast.Return):
