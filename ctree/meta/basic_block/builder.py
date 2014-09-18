@@ -27,9 +27,9 @@ BasicBlock
   Params: {params}
   Body:
     {body}
-        """.format(name=self._name,
-                   params=", ".join(map(str, self._params)),
-                   body="\n    ".join(map(str, self._body)))
+""".format(name=self._name,
+           params=", ".join(map(str, self._params)),
+           body="\n    ".join(map(str, self._body)))
 
 
 class TmpGenerator(object):
@@ -69,12 +69,13 @@ class BlockDecomposer(object):
             elif isinstance(expr.op, ast.Mult):
                 op = operands[0].name + '.__mul__'
             elif isinstance(expr.op, ast.Sub):
-                op = operands[0].name + '.__mul__'
+                op = operands[0].name + '.__sub__'
             elif isinstance(expr.op, ast.Div):
-                op = operands[0].name + '.__mul__'
+                op = operands[0].name + '.__div__'
             else:
                 raise Exception("Unsupported BinOp {}".format(expr.op))
-            body.append(Assign(curr_target, FunctionCall(Symbol(op), operands)))
+            body.append(Assign(curr_target,
+                               FunctionCall(Symbol(op), operands)))
         elif isinstance(expr, ast.Assign):
             target = Symbol(expr.targets[0].id)
             body = self.visit(expr.value, target)
