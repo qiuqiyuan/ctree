@@ -236,3 +236,81 @@ class TestComposableBlocks(unittest.TestCase):
         basic_block.find_composable_blocks(dict(globals(), **locals()))
         print(basic_block)
         self.assertEqual(len(basic_block.composable_blocks), 2)
+
+
+class TestPrintComposableBlocks(unittest.TestCase):
+    def test_no_composable(self):
+        a = 3
+        b = 1
+
+        def func(a, b):
+            return a + b
+
+        tree = get_ast(func)
+        basic_block = get_basic_block(tree)
+        basic_block.find_composable_blocks(dict(globals(), **locals()))
+        self.assertEqual(repr(basic_block), """
+BasicBlock
+  Name: func
+  Params: a, b
+  Body:
+    _t0 = a.__add__(a, b)
+    return _t0
+""")
+
+    def test_one_composable(self):
+        lsf = TestLSF(None)
+        a = 3
+        b = 1
+
+        def func(a, b):
+            a = lsf(a)
+            b = lsf(b)
+            return a + b
+
+        tree = get_ast(func)
+        basic_block = get_basic_block(tree)
+        basic_block.find_composable_blocks(dict(globals(), **locals()))
+        self.assertEqual(repr(basic_block), """
+BasicBlock
+  Name: func
+  Params: a, b
+  Body:
+    ComposableBlock:
+      a = lsf(a)
+      b = lsf(b)
+    _t0 = a.__add__(a, b)
+    return _t0
+""")
+
+    def test_two_composable(self):
+        lsf = TestLSF(None)
+        lsf2 = TestLSF(None)
+        a = 3
+        b = 1
+
+        def func(a, b):
+            a = lsf(a)
+            b = lsf(b)
+            c = a + b
+            d = lsf2(c)
+            return lsf2(d)
+
+        tree = get_ast(func)
+        basic_block = get_basic_block(tree)
+        basic_block.find_composable_blocks(dict(globals(), **locals()))
+        print(basic_block)
+        self.assertEqual(repr(basic_block), """
+BasicBlock
+  Name: func
+  Params: a, b
+  Body:
+    ComposableBlock:
+      a = lsf(a)
+      b = lsf(b)
+    c = a.__add__(a, b)
+    ComposableBlock:
+      d = lsf2(c)
+      _t0 = lsf2(d)
+    return _t0
+""")

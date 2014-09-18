@@ -1,5 +1,5 @@
 from ctree.frontend import get_ast
-from .basic_block.builder import get_basic_block
+from .basic_blocks import get_basic_block
 
 
 class MetaSpecializer(object):

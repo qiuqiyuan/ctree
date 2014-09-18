@@ -12,7 +12,7 @@ def eval_in_env(env, expr):
     raise Exception("Unhandled type for eval_in_env {}".format(type(expr)))
 
 
-def str_dump(item):
+def str_dump(item, tab=0):
     if isinstance(item, ast.Assign):
         return "{} = {}".format(str_dump(item.targets[0]),
                                 str_dump(item.value))
@@ -27,6 +27,10 @@ def str_dump(item):
         return str(item.n)
     elif isinstance(item, ast.Name):
         return item.id
+    elif isinstance(item, ComposableBlock):
+        tab = "\n" + "".join([" " for _ in range(tab + 2)])
+        return "ComposableBlock:{}{}".format(tab, tab.join(
+            map(str_dump, item.statements)))
     raise Exception("Unsupport type for dumping {}: {}".format(type(item),
                                                                item))
 
@@ -46,8 +50,6 @@ class BasicBlock(object):
         composable_statements = []
         composable_blocks = []
         for statement in self.body:
-            if isinstance(statement, ast.Assign):
-                print(eval_in_env(env, statement.value.func))
             if isinstance(statement, ast.Assign) and \
                isinstance(statement.value, ast.Call) and \
                isinstance(eval_in_env(env, statement.value.func),
@@ -60,9 +62,10 @@ class BasicBlock(object):
                     composable_blocks.append(composable_block)
                 elif len(composable_statements) == 1:
                     statements.append(composable_statements[0])
+                statements.append(statement)
                 composable_statements = []
 
-        self.statements = statements
+        self.body = statements
         self.composable_blocks = composable_blocks
 
     def __len__(self):
@@ -83,7 +86,7 @@ BasicBlock
     {body}
 """.format(name=self.name,
            params=", ".join(self.params),
-           body="\n    ".join(map(str_dump, self.body)))
+           body="\n    ".join(map(lambda x: str_dump(x, 4), self.body)))
 
 
 class ComposableBlock(object):
@@ -91,12 +94,6 @@ class ComposableBlock(object):
     def __init__(self, statements):
         super(ComposableBlock, self).__init__()
         self.statements = statements
-
-    def __str__(self):
-        return """
-ComposableBlock
-  {}
-""".format("\n  ".join(map(str, self.statements)))
 
 
 class BlockDecomposer(object):
@@ -178,5 +175,3 @@ def get_basic_block(module):
     body = map(decomposer.visit, func.body)
     body = reduce(lambda x, y: x + y, body, [])
     return BasicBlock(func.name, params, body)
-
-
