@@ -34,7 +34,7 @@ BasicBlock
 
 class BlockDecomposer(object):
     def __init__(self):
-        self._curr = -1
+        self._curr_tmp = -1
 
     def gen_tmp(self):
         self._curr_tmp += 1
