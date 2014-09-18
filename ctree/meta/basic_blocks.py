@@ -44,7 +44,6 @@ class BasicBlock(object):
         composable_statements = []
         composable_blocks = []
         for statement in self.body:
-            print(statement)
             if isinstance(statement, ast.Assign) and \
                isinstance(statement.value, ast.Call) and \
                isinstance(eval_in_env(env, statement.value.func),
