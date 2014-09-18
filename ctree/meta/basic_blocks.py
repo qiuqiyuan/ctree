@@ -1,16 +1,14 @@
 import ast
 from functools import reduce
-from .nodes import Assign, Symbol, Return, Param, Constant, FunctionCall,\
-    Attribute
 import sys
 from ctree.jit import LazySpecializedFunction
 
 
 def eval_in_env(expr, env):
-    if isinstance(expr, Symbol):
-        return env[expr.name]
-    elif isinstance(expr, Attribute):
-        return getattr(env[expr.name], expr.attr)
+    if isinstance(expr, ast.Name):
+        return env[expr.id]
+    elif isinstance(expr, ast.Attribute):
+        return getattr(env[expr.value.id], expr.attr)
 
 
 def str_dump(item):
@@ -47,8 +45,8 @@ class BasicBlock(object):
         composable_blocks = []
         for statement in self.body:
             print(statement)
-            if isinstance(statement, Assign) and \
-               isinstance(statement.value, FunctionCall) and \
+            if isinstance(statement, ast.Assign) and \
+               isinstance(statement.value, ast.Call) and \
                isinstance(eval_in_env(env, statement.value.func),
                           LazySpecializedFunction):
                 composable_statements.append(statement)

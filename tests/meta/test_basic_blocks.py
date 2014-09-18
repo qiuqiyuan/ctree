@@ -1,8 +1,7 @@
 import unittest
 from ctree.frontend import get_ast
 
-from ctree.meta.blocks.basic_blocks import get_basic_block
-from ctree.meta.blocks.nodes import Symbol, Constant, Return
+from ctree.meta.basic_blocks import get_basic_block
 
 import ast
 
@@ -12,10 +11,10 @@ from ctree.jit import LazySpecializedFunction
 class TestBasicBlockBuilder(unittest.TestCase):
     def _check_args(self, actual, expected):
         for act, exp in zip(actual, expected):
-            if isinstance(act, Symbol):
+            if isinstance(act, ast.Name):
                 self.assertEqual(act.id, exp)
-            elif isinstance(act, Constant) and act.value is not exp:
-                self.assertEqual(act.value, exp)
+            elif isinstance(act, ast.Num):
+                self.assertEqual(act.n, exp)
 
     def test_simple_return(self):
         def func(a, b):
