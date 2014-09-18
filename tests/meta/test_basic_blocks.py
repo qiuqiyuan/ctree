@@ -217,3 +217,22 @@ class TestComposableBlocks(unittest.TestCase):
         basic_block.find_composable_blocks(dict(globals(), **locals()))
         print(basic_block)
         self.assertEqual(len(basic_block.composable_blocks), 1)
+
+    def test_two_composable(self):
+        lsf = TestLSF(None)
+        lsf2 = TestLSF(None)
+        a = 3
+        b = 1
+
+        def func(a, b):
+            a = lsf(a)
+            b = lsf(b)
+            c = a + b
+            d = lsf2(c)
+            return lsf2(d)
+
+        tree = get_ast(func)
+        basic_block = get_basic_block(tree)
+        basic_block.find_composable_blocks(dict(globals(), **locals()))
+        print(basic_block)
+        self.assertEqual(len(basic_block.composable_blocks), 2)
