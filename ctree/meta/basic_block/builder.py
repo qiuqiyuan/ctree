@@ -32,18 +32,13 @@ BasicBlock
            body="\n    ".join(map(str, self._body)))
 
 
-class TmpGenerator(object):
+class BlockDecomposer(object):
     def __init__(self):
         self._curr = -1
 
-    def __call__(self):
-        self._curr += 1
+    def gen_tmp(self):
+        self._curr_tmp += 1
         return Symbol("_t{}".format(self._curr))
-
-
-class BlockDecomposer(object):
-    def __init__(self):
-        self.gen_tmp = TmpGenerator()
 
     def visit(self, expr, curr_target=None):
         if isinstance(expr, ast.Return):
