@@ -38,7 +38,7 @@ class BlockDecomposer(object):
 
     def gen_tmp(self):
         self._curr_tmp += 1
-        return Symbol("_t{}".format(self._curr))
+        return Symbol("_t{}".format(self._curr_tmp))
 
     def visit(self, expr, curr_target=None):
         if isinstance(expr, ast.Return):
