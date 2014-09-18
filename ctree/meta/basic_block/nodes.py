@@ -80,6 +80,5 @@ class FunctionCall(BasicBlockNode):
         return self._args[:]
 
     def __str__(self):
-        return "{}({})".format(str(self._func), ", ".join(map(str, self._args)))
-    
-            
+        return "{}({})".format(str(self._func),
+                               ", ".join(map(str, self._args)))
