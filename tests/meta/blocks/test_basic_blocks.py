@@ -1,9 +1,8 @@
 import unittest
 from ctree.frontend import get_ast
 
-from ctree.meta.basic_block.builder import get_basic_block
-from ctree.meta.basic_block.builder import Return
-from ctree.meta.basic_block.nodes import Symbol, Constant, FunctionCall
+from ctree.meta.blocks.basic_blocks import get_basic_block
+from ctree.meta.blocks.nodes import Symbol, Constant, FunctionCall, Return
 
 
 class TestBasicBlockBuilder(unittest.TestCase):
