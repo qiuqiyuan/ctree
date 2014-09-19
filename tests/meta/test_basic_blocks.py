@@ -28,7 +28,7 @@ class TestBasicBlockBuilder(unittest.TestCase):
             basic_block[0].value.func.value.id, 'a')
         self.assertEqual(
             basic_block[0].value.func.attr, '__add__')
-        self._check_args(basic_block[0].value.args, ['a', 'b'])
+        self._check_args(basic_block[0].value.args, ['b'])
         self.assertIsInstance(basic_block[1], ast.Return)
         self.assertEqual(basic_block[1].value.id, '_t0')
 
@@ -45,13 +45,13 @@ class TestBasicBlockBuilder(unittest.TestCase):
             basic_block[0].value.func.value.id, 'a')
         self.assertEqual(
             basic_block[0].value.func.attr, '__mul__')
-        self._check_args(basic_block[0].value.args, ['a', 'b'])
+        self._check_args(basic_block[0].value.args, ['b'])
         self.assertEqual(basic_block[1].targets[0].id, '_t0')
         self.assertEqual(
             basic_block[1].value.func.value.id, 'c')
         self.assertEqual(
             basic_block[1].value.func.attr, '__mul__')
-        self._check_args(basic_block[1].value.args, ['c', 3])
+        self._check_args(basic_block[1].value.args, [3])
         self.assertIsInstance(basic_block[2], ast.Return)
         self.assertEqual(basic_block[2].value.id, '_t0')
 
@@ -68,13 +68,13 @@ class TestBasicBlockBuilder(unittest.TestCase):
             basic_block[0].value.func.value.id, 'a')
         self.assertEqual(
             basic_block[0].value.func.attr, '__mul__')
-        self._check_args(basic_block[0].value.args, ['a', 'b'])
+        self._check_args(basic_block[0].value.args, ['b'])
         self.assertEqual(basic_block[1].targets[0].id, '_t0')
         self.assertEqual(
             basic_block[1].value.func.value.id, '_t1')
         self.assertEqual(
             basic_block[1].value.func.attr, '__add__')
-        self._check_args(basic_block[1].value.args, ['_t1', 'c'])
+        self._check_args(basic_block[1].value.args, ['c'])
         self.assertIsInstance(basic_block[2], ast.Return)
         self.assertEqual(basic_block[2].value.id, '_t0')
 
@@ -91,13 +91,13 @@ class TestBasicBlockBuilder(unittest.TestCase):
             basic_block[0].value.func.value.id, 'b')
         self.assertEqual(
             basic_block[0].value.func.attr, '__mul__')
-        self._check_args(basic_block[0].value.args, ['b', 'c'])
+        self._check_args(basic_block[0].value.args, ['c'])
         self.assertEqual(basic_block[1].targets[0].id, '_t0')
         self.assertEqual(
             basic_block[1].value.func.value.id, 'a')
         self.assertEqual(
             basic_block[1].value.func.attr, '__add__')
-        self._check_args(basic_block[1].value.args, ['a', '_t1'])
+        self._check_args(basic_block[1].value.args, ['_t1'])
         self.assertIsInstance(basic_block[2], ast.Return)
         self.assertEqual(basic_block[2].value.id, '_t0')
 
@@ -134,7 +134,7 @@ class TestBasicBlockBuilder(unittest.TestCase):
         self.assertIsInstance(basic_block[0].value, ast.Call)
         self.assertEqual(basic_block[0].value.func.value.id, 'a')
         self.assertEqual(basic_block[0].value.func.attr, '__add__')
-        self._check_args(basic_block[0].value.args, ['a', 'b'])
+        self._check_args(basic_block[0].value.args, ['b'])
         self.assertEqual(basic_block[0].targets[0].id, '_t1')
         self.assertIsInstance(basic_block[0].value, ast.Call)
         self.assertEqual(basic_block[1].value.func.id, 'z')
@@ -157,7 +157,7 @@ BasicBlock
   Name: func
   Params: a, b
   Body:
-    _t0 = a.__add__(a, b)
+    _t0 = a.__add__(b)
     return _t0
 """)
 
@@ -175,12 +175,12 @@ BasicBlock
   Name: func
   Params: a, b
   Body:
-    c = a.__mul__(a, b)
+    c = a.__mul__(b)
     d = z(c)
-    _t2 = a.__add__(a, b)
-    _t3 = a.__sub__(a, b)
+    _t2 = a.__add__(b)
+    _t3 = a.__sub__(b)
     _t1 = z(_t2, _t3)
-    _t0 = d.__mul__(d, _t1)
+    _t0 = d.__mul__(_t1)
     return _t0
 """)
 
@@ -254,7 +254,7 @@ BasicBlock
   Name: func
   Params: a, b
   Body:
-    _t0 = a.__add__(a, b)
+    _t0 = a.__add__(b)
     return _t0
 """)
 
@@ -279,7 +279,7 @@ BasicBlock
     ComposableBlock:
       a = lsf(a)
       b = lsf(b)
-    _t0 = a.__add__(a, b)
+    _t0 = a.__add__(b)
     return _t0
 """)
 
@@ -307,7 +307,7 @@ BasicBlock
     ComposableBlock:
       a = lsf(a)
       b = lsf(b)
-    c = a.__add__(a, b)
+    c = a.__add__(b)
     ComposableBlock:
       d = lsf2(c)
       _t0 = lsf2(d)
