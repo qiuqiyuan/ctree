@@ -1,7 +1,7 @@
 import unittest
 from ctree.frontend import get_ast
 
-from ctree.meta.basic_blocks import get_basic_block
+from ctree.meta.basic_blocks import get_basic_block, find_composable_blocks
 
 import ast
 
@@ -199,7 +199,7 @@ class TestComposableBlocks(unittest.TestCase):
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block.find_composable_blocks(dict(globals(), **locals()))
+        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
         self.assertEqual(len(basic_block.composable_blocks), 0)
 
     def test_one_composable(self):
@@ -214,7 +214,7 @@ class TestComposableBlocks(unittest.TestCase):
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block.find_composable_blocks(dict(globals(), **locals()))
+        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
         print(basic_block)
         self.assertEqual(len(basic_block.composable_blocks), 1)
 
@@ -233,7 +233,7 @@ class TestComposableBlocks(unittest.TestCase):
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block.find_composable_blocks(dict(globals(), **locals()))
+        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
         print(basic_block)
         self.assertEqual(len(basic_block.composable_blocks), 2)
 
@@ -248,7 +248,7 @@ class TestPrintComposableBlocks(unittest.TestCase):
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block.find_composable_blocks(dict(globals(), **locals()))
+        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
         self.assertEqual(repr(basic_block), """
 BasicBlock
   Name: func
@@ -270,7 +270,7 @@ BasicBlock
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block.find_composable_blocks(dict(globals(), **locals()))
+        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
         self.assertEqual(repr(basic_block), """
 BasicBlock
   Name: func
@@ -298,8 +298,7 @@ BasicBlock
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block.find_composable_blocks(dict(globals(), **locals()))
-        print(basic_block)
+        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
         self.assertEqual(repr(basic_block), """
 BasicBlock
   Name: func

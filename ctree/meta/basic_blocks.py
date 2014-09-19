@@ -41,32 +41,9 @@ class BasicBlock(object):
         self.params = params
         self.body = body
         if composable_blocks is None:
-            self.composable_blocks = []
+            self.composable_blocks = ()
         else:
             self.composable_blocks = composable_blocks
-
-    def find_composable_blocks(self, env):
-        statements = []
-        composable_statements = []
-        composable_blocks = []
-        for statement in self.body:
-            if isinstance(statement, ast.Assign) and \
-               isinstance(statement.value, ast.Call) and \
-               isinstance(eval_in_env(env, statement.value.func),
-                          LazySpecializedFunction):
-                composable_statements.append(statement)
-            else:
-                if len(composable_statements) > 1:
-                    composable_block = ComposableBlock(composable_statements)
-                    statements.append(composable_block)
-                    composable_blocks.append(composable_block)
-                elif len(composable_statements) == 1:
-                    statements.append(composable_statements[0])
-                statements.append(statement)
-                composable_statements = []
-
-        self.body = statements
-        self.composable_blocks = composable_blocks
 
     def __len__(self):
         return len(self.body)
@@ -89,6 +66,29 @@ BasicBlock
            body="\n    ".join(map(lambda x: str_dump(x, 4), self.body)))
 
 
+def find_composable_blocks(basic_block, env):
+    statements = ()
+    composable_statements = ()
+    composable_blocks = ()
+    for statement in basic_block.body:
+        if isinstance(statement, ast.Assign) and \
+           isinstance(statement.value, ast.Call) and \
+           isinstance(eval_in_env(env, statement.value.func),
+                      LazySpecializedFunction):
+            composable_statements += (statement, )
+        else:
+            if len(composable_statements) > 1:
+                composable_block = ComposableBlock(composable_statements)
+                statements += (composable_block, )
+                composable_blocks += (composable_block, )
+            elif len(composable_statements) == 1:
+                statements += (composable_statements[0], )
+            statements += (statement, )
+            composable_statements = ()
+
+    return BasicBlock(basic_block.name, basic_block.params, statements, composable_blocks)
+
+
 class ComposableBlock(object):
     """docstring for ComposableBlock"""
     def __init__(self, statements):
@@ -108,20 +108,20 @@ class BlockDecomposer(object):
         if isinstance(expr, ast.Return):
             tmp = self.gen_tmp()
             body = self.visit(expr.value, ast.Name(tmp, ast.Store()))
-            body.append(ast.Return(ast.Name(tmp, ast.Load())))
+            body += (ast.Return(ast.Name(tmp, ast.Load())), )
         elif isinstance(expr, ast.Name):
             return expr
         elif isinstance(expr, ast.BinOp):
-            body = []
-            operands = []
+            body = ()
+            operands = ()
             for operand in [expr.left, expr.right]:
                 if isinstance(operand, (ast.Name, ast.Num)):
-                    operands.append(operand)
+                    operands += (operand, )
                 else:
                     tmp = self.gen_tmp()
-                    body.extend(self.visit(operand,
-                                           ast.Name(tmp, ast.Store())))
-                    operands.append(ast.Name(tmp, ast.Load()))
+                    body += self.visit(operand,
+                                       ast.Name(tmp, ast.Store()))
+                    operands += (ast.Name(tmp, ast.Load()), )
             if isinstance(expr.op, ast.Add):
                 op = ast.Attribute(operands[0], '__add__', ast.Load())
             elif isinstance(expr.op, ast.Mult):
@@ -132,34 +132,33 @@ class BlockDecomposer(object):
                 op = ast.Attribute(operands[0], '__div__', ast.Load())
             else:
                 raise Exception("Unsupported BinOp {}".format(expr.op))
-            body.append(ast.Assign([curr_target],
-                                   ast.Call(op, operands, [], None, None)))
+            body += (ast.Assign([curr_target],
+                                   ast.Call(op, operands, [], None, None)), )
         elif isinstance(expr, ast.Assign):
             target = expr.targets[0]
             body = self.visit(expr.value, target)
         elif isinstance(expr, ast.Call):
-            body = []
-            args = []
+            body = ()
+            args = ()
             for arg in expr.args:
                 val = self.visit(arg)
-                if isinstance(val, list):
+                if isinstance(val, tuple):
                     tmp = self.gen_tmp()
                     val = self.visit(arg, ast.Name(tmp, ast.Store))
-                    body.extend(val)
-                    args.append(ast.Name(tmp, ast.Load()))
+                    body += val
+                    args += (ast.Name(tmp, ast.Load()), )
                 elif isinstance(val, (ast.Name, ast.Num)):
-                    args.append(val)
+                    args += (val, )
                 else:
                     raise Exception("Call argument returned\
                                      unsupported type {}".format(type(val)))
             if curr_target is not None:
-                body.append(ast.Assign(
+                body += (ast.Assign(
                     [curr_target],
                     ast.Call(self.visit(expr.func), args, [], None, None)
-                    )
-                )
+                ), )
             else:
-                body.append(ast.Call(self.visit(expr.func), args))
+                body += (ast.Call(self.visit(expr.func), args), )
         else:
             raise Exception("Unsupported expression {}".format(expr))
         return body
@@ -169,9 +168,9 @@ def get_basic_block(module):
     func = module.body[0]
     decomposer = BlockDecomposer()
     if sys.version_info > (3, 0):
-        params = [arg.arg for arg in func.args.args]
+        params = tuple(arg.arg for arg in func.args.args)
     else:
-        params = [arg.id for arg in func.args.args]
+        params = tuple(arg.id for arg in func.args.args)
     body = map(decomposer.visit, func.body)
-    body = reduce(lambda x, y: x + y, body, [])
+    body = reduce(lambda x, y: x + y, body, ())
     return BasicBlock(func.name, params, body)
