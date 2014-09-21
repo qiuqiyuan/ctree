@@ -73,13 +73,14 @@ BasicBlock
 
 def is_composable(statement, env):
     return isinstance(statement, ast.Assign) and \
-           isinstance(statement.value, ast.Call) and \
-           isinstance(eval_in_env(env, statement.value.func),
-                      LazySpecializedFunction)
+        isinstance(statement.value, ast.Call) and \
+        isinstance(eval_in_env(env, statement.value.func),
+                   LazySpecializedFunction)
 
 
 def find_composable_blocks(basic_block, env):
-    # TODO: This is a pretty convoluted function, simplify it to a reduction across the block
+    # TODO: This is a pretty convoluted function, simplify it to a
+    # reduction across the block
     statements = ()
     composable_statements = ()
     composable_blocks = ()
@@ -96,7 +97,8 @@ def find_composable_blocks(basic_block, env):
             statements += (statement, )
             composable_statements = ()
 
-    return BasicBlock(basic_block.name, basic_block.params, statements, composable_blocks)
+    return BasicBlock(basic_block.name, basic_block.params,
+                      statements, composable_blocks)
 
 
 class ComposableBlock(object):
@@ -122,14 +124,14 @@ def decompose(expr):
         elif isinstance(expr, ast.BinOp):
             body = ()
             operands = []
-            
+
             for operand in [expr.left, expr.right]:
                 if isinstance(operand, (ast.Name, ast.Num)):
                     operands += (operand, )
                 else:
                     tmp = gen_tmp()
                     body += visit(operand,
-                                       ast.Name(tmp, ast.Store()))
+                                  ast.Name(tmp, ast.Store()))
                     operands.append(ast.Name(tmp, ast.Load()))
             if isinstance(expr.op, ast.Add):
                 op = ast.Attribute(operands[0], '__add__', ast.Load())
@@ -143,7 +145,7 @@ def decompose(expr):
                 raise Exception("Unsupported BinOp {}".format(expr.op))
             operands.pop(0)
             body += (ast.Assign([curr_target],
-                                   ast.Call(op, operands, [], None, None)), )
+                                ast.Call(op, operands, [], None, None)), )
         elif isinstance(expr, ast.Assign):
             target = expr.targets[0]
             body = visit(expr.value, target)

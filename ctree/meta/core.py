@@ -18,11 +18,11 @@ def meta(func):
         for frame in inspect.stack()[1:]:
             symbol_table.update(frame[0].f_locals)
             for index, arg in enumerate(args):
-                arg = original_ast.body[0].args.args[index]
+                name = original_ast.body[0].args.args[index]
                 if sys.version_info >= (3, 0):
-                    symbol_table[arg.arg] = arg
+                    symbol_table[name.arg] = arg
                 else:
-                    symbol_table[arg.id] = arg
+                    symbol_table[name.id] = arg
         basic_block = find_composable_blocks(orig_basic_block, symbol_table)
         basic_block = process_composable_blocks(basic_block, symbol_table)
         callable = get_callable(basic_block, symbol_table, args)
