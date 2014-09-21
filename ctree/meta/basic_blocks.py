@@ -193,18 +193,3 @@ def process_composable_blocks(basic_block, env):
     body = map(unpack, basic_block.body)
     body = reduce(lambda x, y: x + y, body, ())
     return BasicBlock(basic_block.name, basic_block.params, body)
-
-
-def my_exec(func, env):
-    if sys.version_info >= (3, 0):
-        exec(func, env)
-    else:
-        exec(func) in env
-
-def get_callable(basic_block, env, args):
-    tree = ast.Module(
-        [ast.FunctionDef(basic_block.name, basic_block.params, list(basic_block.body), [])]
-    )
-    ast.fix_missing_locations(tree)
-    my_exec(compile(tree, filename="tmp", mode="exec"), env)
-    return env[basic_block.name]

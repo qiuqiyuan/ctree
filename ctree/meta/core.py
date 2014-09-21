@@ -3,6 +3,7 @@ from .basic_blocks import get_basic_block, find_composable_blocks, process_compo
 import inspect
 import sys
 from copy import deepcopy
+import ast
 
 
 def meta(func):
@@ -26,3 +27,19 @@ def meta(func):
         return callable(*args, **kwargs)
 
     return meta_specialized
+
+
+def my_exec(func, env):
+    if sys.version_info >= (3, 0):
+        exec(func, env)
+    else:
+        exec(func) in env
+
+
+def get_callable(basic_block, env, args):
+    tree = ast.Module(
+        [ast.FunctionDef(basic_block.name, basic_block.params, list(basic_block.body), [])]
+    )
+    ast.fix_missing_locations(tree)
+    my_exec(compile(tree, filename="tmp", mode="exec"), env)
+    return env[basic_block.name]
