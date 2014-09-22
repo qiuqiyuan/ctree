@@ -63,6 +63,9 @@ class BasicBlock(object):
     def __str__(self):
         return self.__repr__()
 
+    def __iter__(self):
+        return iter(self.body)
+
     def __repr__(self):
         return """
 BasicBlock
@@ -108,9 +111,17 @@ class SubBlock(object):
     def __init__(self, statements):
         super(SubBlock, self).__init__()
         self.statements = statements
+        self.live_ins = set()
+        self.live_outs = set()
 
     def add_statement(self, item):
         self.statements.append(item)
+
+    def __iter__(self):
+        return iter(self.statements)
+
+    def __getitem__(self, item):
+        return self.statements[item]
 
 
 class ComposableBlock(SubBlock):
@@ -131,9 +142,12 @@ def decompose(expr):
 
     def visit(expr, curr_target=None):
         if isinstance(expr, ast.Return):
-            tmp = gen_tmp()
-            body = visit(expr.value, ast.Name(tmp, ast.Store()))
-            body += (ast.Return(ast.Name(tmp, ast.Load())), )
+            if isinstance(expr.value, ast.Name):
+                body = (expr, )
+            else:
+                tmp = gen_tmp()
+                body = visit(expr.value, ast.Name(tmp, ast.Store()))
+                body = (ast.Return(ast.Name(tmp, ast.Load())), )
         elif isinstance(expr, ast.Name):
             return expr
         elif isinstance(expr, ast.BinOp):
