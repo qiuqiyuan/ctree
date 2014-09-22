@@ -1,7 +1,8 @@
 import unittest
 from ctree.frontend import get_ast
 
-from ctree.meta.basic_blocks import get_basic_block, find_composable_blocks
+from ctree.meta.basic_blocks import get_basic_block, \
+    separate_composable_blocks, NonComposableBlock, ComposableBlock
 
 import ast
 
@@ -199,8 +200,10 @@ class TestComposableBlocks(unittest.TestCase):
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
-        self.assertEqual(len(basic_block.composable_blocks), 0)
+        basic_block = separate_composable_blocks(basic_block,
+                                                 dict(globals(), **locals()))
+        self.assertIsInstance(basic_block[0], NonComposableBlock)
+        self.assertEqual(len(basic_block), 1)
 
     def test_one_composable(self):
         lsf = TestLSF(None)
@@ -214,9 +217,11 @@ class TestComposableBlocks(unittest.TestCase):
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
-        print(basic_block)
-        self.assertEqual(len(basic_block.composable_blocks), 1)
+        basic_block = separate_composable_blocks(basic_block,
+                                                 dict(globals(), **locals()))
+        self.assertIsInstance(basic_block[0], ComposableBlock)
+        self.assertIsInstance(basic_block[1], NonComposableBlock)
+        self.assertEqual(len(basic_block), 2)
 
     def test_two_composable(self):
         lsf = TestLSF(None)
@@ -233,9 +238,13 @@ class TestComposableBlocks(unittest.TestCase):
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
-        print(basic_block)
-        self.assertEqual(len(basic_block.composable_blocks), 2)
+        basic_block = separate_composable_blocks(basic_block,
+                                                 dict(globals(), **locals()))
+        self.assertIsInstance(basic_block[0], ComposableBlock)
+        self.assertIsInstance(basic_block[1], NonComposableBlock)
+        self.assertIsInstance(basic_block[2], ComposableBlock)
+        self.assertIsInstance(basic_block[3], NonComposableBlock)
+        self.assertEqual(len(basic_block), 4)
 
 
 class TestPrintComposableBlocks(unittest.TestCase):
@@ -248,14 +257,15 @@ class TestPrintComposableBlocks(unittest.TestCase):
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
+        basic_block = separate_composable_blocks(basic_block, dict(globals(), **locals()))
         self.assertEqual(repr(basic_block), """
 BasicBlock
   Name: func
   Params: a, b
   Body:
-    _t0 = a.__add__(b)
-    return _t0
+    NonComposableBlock:
+      _t0 = a.__add__(b)
+      return _t0
 """)
 
     def test_one_composable(self):
@@ -270,7 +280,7 @@ BasicBlock
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
+        basic_block = separate_composable_blocks(basic_block, dict(globals(), **locals()))
         self.assertEqual(repr(basic_block), """
 BasicBlock
   Name: func
@@ -279,8 +289,9 @@ BasicBlock
     ComposableBlock:
       a = lsf(a)
       b = lsf(b)
-    _t0 = a.__add__(b)
-    return _t0
+    NonComposableBlock:
+      _t0 = a.__add__(b)
+      return _t0
 """)
 
     def test_two_composable(self):
@@ -298,7 +309,7 @@ BasicBlock
 
         tree = get_ast(func)
         basic_block = get_basic_block(tree)
-        basic_block = find_composable_blocks(basic_block, dict(globals(), **locals()))
+        basic_block = separate_composable_blocks(basic_block, dict(globals(), **locals()))
         self.assertEqual(repr(basic_block), """
 BasicBlock
   Name: func
@@ -307,9 +318,11 @@ BasicBlock
     ComposableBlock:
       a = lsf(a)
       b = lsf(b)
-    c = a.__add__(b)
+    NonComposableBlock:
+      c = a.__add__(b)
     ComposableBlock:
       d = lsf2(c)
       _t0 = lsf2(d)
-    return _t0
+    NonComposableBlock:
+      return _t0
 """)

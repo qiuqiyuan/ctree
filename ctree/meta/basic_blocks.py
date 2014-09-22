@@ -31,6 +31,10 @@ def str_dump(item, tab=0):
         tab = "\n" + "".join([" " for _ in range(tab + 2)])
         return "ComposableBlock:{}{}".format(tab, tab.join(
             map(str_dump, item.statements)))
+    elif isinstance(item, NonComposableBlock):
+        tab = "\n" + "".join([" " for _ in range(tab + 2)])
+        return "NonComposableBlock:{}{}".format(tab, tab.join(
+            map(str_dump, item.statements)))
     elif isinstance(item, ast.arguments):
         if sys.version_info >= (3, 0):
             return ", ".join(arg.arg for arg in item.args)
@@ -78,34 +82,45 @@ def is_composable(statement, env):
                    LazySpecializedFunction)
 
 
-def find_composable_blocks(basic_block, env):
+def separate_composable_blocks(basic_block, env):
     # TODO: This is a pretty convoluted function, simplify it to a
     # reduction across the block
-    statements = ()
-    composable_statements = ()
-    composable_blocks = ()
+    statements = []
     for statement in basic_block.body:
         if is_composable(statement, env):
-            composable_statements += (statement, )
+            if len(statements) > 0 and \
+               isinstance(statements[-1], ComposableBlock):
+                statements[-1].add_statement(statement)
+            else:
+                statements.append(ComposableBlock([statement]))
         else:
-            if len(composable_statements) > 1:
-                composable_block = ComposableBlock(composable_statements)
-                statements += (composable_block, )
-                composable_blocks += (composable_block, )
-            elif len(composable_statements) == 1:
-                statements += (composable_statements[0], )
-            statements += (statement, )
-            composable_statements = ()
+            if len(statements) > 0 and \
+               isinstance(statements[-1], NonComposableBlock):
+                statements[-1].add_statement(statement)
+            else:
+                statements.append(NonComposableBlock([statement]))
 
     return BasicBlock(basic_block.name, basic_block.params,
-                      statements, composable_blocks)
+                      statements)
 
 
-class ComposableBlock(object):
-    """docstring for ComposableBlock"""
+class SubBlock(object):
     def __init__(self, statements):
-        super(ComposableBlock, self).__init__()
+        super(SubBlock, self).__init__()
         self.statements = statements
+
+    def add_statement(self, item):
+        self.statements.append(item)
+
+
+class ComposableBlock(SubBlock):
+    """docstring for ComposableBlock"""
+    pass
+
+
+class NonComposableBlock(SubBlock):
+    """docstring for NonComposableBlock"""
+    pass
 
 
 def decompose(expr):
@@ -186,12 +201,11 @@ def get_basic_block(module):
 
 
 def unpack(statement):
-    if isinstance(statement, ComposableBlock):
+    if isinstance(statement, SubBlock):
         return statement.statements
-    return (statement, )
 
 
 def process_composable_blocks(basic_block, env):
     body = map(unpack, basic_block.body)
-    body = reduce(lambda x, y: x + y, body, ())
+    body = reduce(lambda x, y: x + y, body, [])
     return BasicBlock(basic_block.name, basic_block.params, body)

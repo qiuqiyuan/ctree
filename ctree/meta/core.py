@@ -1,5 +1,5 @@
 from ctree.frontend import get_ast
-from .basic_blocks import get_basic_block, find_composable_blocks, \
+from .basic_blocks import get_basic_block, separate_composable_blocks, \
     process_composable_blocks
 import inspect
 import sys
@@ -23,7 +23,7 @@ def meta(func):
                     symbol_table[name.arg] = arg
                 else:
                     symbol_table[name.id] = arg
-        basic_block = find_composable_blocks(orig_basic_block, symbol_table)
+        basic_block = separate_composable_blocks(orig_basic_block, symbol_table)
         basic_block = process_composable_blocks(basic_block, symbol_table)
         callable = get_callable(basic_block, symbol_table, args)
         return callable(*args, **kwargs)

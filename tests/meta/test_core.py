@@ -11,6 +11,7 @@ from ctree.c.nodes import FunctionCall, FunctionDecl, SymbolRef, Constant, \
 from ctree.templates.nodes import StringTemplate
 from ctree.ocl.nodes import OclFile
 from ctree.ocl.macros import clSetKernelArg, get_global_id, NULL
+import ctree.np
 
 
 class OclFunc(ConcreteSpecializedFunction):
@@ -37,26 +38,28 @@ class OclFunc(ConcreteSpecializedFunction):
         return C
 
 
-class OclDoubler(LazySpecializedFunction):
+class OclAdd(LazySpecializedFunction):
     def args_to_subconfig(self, args):
         A = args[0]
         return tuple(np.ctypeslib.ndpointer(A.dtype, A.ndim, A.shape)
-                     for _ in args + (None, ))
+                     for _ in args + (args[0], ))
 
     def transform(self, tree, program_config):
-        A = program_config[0]
-        B = program_config[1]
-        C = program_config[2]
-        len_A = np.prod(A.__shape__)
+        arg_cfg = program_config[0]
+        A = arg_cfg[0]
+        B = arg_cfg[1]
+        C = arg_cfg[2]
+        len_A = np.prod(A._shape_)
         # inner_type = A.__dtype__.type()
 
         kernel = FunctionDecl(
-            None, "kernel",
+            None, "add_kernel",
             params=[SymbolRef("A", A()).set_global(),
                     SymbolRef("B", B()).set_global(),
                     SymbolRef("C", C()).set_global()],
             defn=[Assign(ArrayRef(SymbolRef("C"), get_global_id(0)),
-                         Add(SymbolRef('A'), SymbolRef('B')))]
+                         Add(ArrayRef(SymbolRef('A'), get_global_id(0)),
+                             ArrayRef(SymbolRef('B'), get_global_id(0))))]
         ).set_kernel()
 
         file = OclFile("kernel", [kernel])
@@ -70,7 +73,7 @@ class OclDoubler(LazySpecializedFunction):
                 #endif
             """),
             FunctionDecl(
-                None, params=[SymbolRef('queue', cl.cl_command_queue()),
+                None, 'control', params=[SymbolRef('queue', cl.cl_command_queue()),
                               SymbolRef('kernel', cl.cl_kernel()),
                               SymbolRef('a', cl.cl_mem()),
                               SymbolRef('b', cl.cl_mem()),
@@ -81,7 +84,7 @@ class OclDoubler(LazySpecializedFunction):
                     clSetKernelArg('kernel', 0, ct.sizeof(cl.cl_mem), 'a'),
                     clSetKernelArg('kernel', 1, ct.sizeof(cl.cl_mem), 'b'),
                     clSetKernelArg('kernel', 2, ct.sizeof(cl.cl_mem), 'c'),
-                    FunctionCall(SymbolRef('clSetKernelArg'),
+                    FunctionCall(SymbolRef('clEnqueueNDRangeKernel'),
                                  [SymbolRef('queue'), SymbolRef('kernel'),
                                   Constant(1), Constant(0),
                                   Ref(SymbolRef('global')),
@@ -92,13 +95,16 @@ class OclDoubler(LazySpecializedFunction):
         ]
 
         proj = Project([file, CFile('control', control)])
+        print(proj.files[1])
         fn = OclFunc()
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
-        ptr = program['kernel']
+        ptr = program['add_kernel']
         entry_type = ct.CFUNCTYPE(None, cl.cl_command_queue, cl.cl_kernel,
                                   cl.cl_mem, cl.cl_mem, cl.cl_mem)
         return fn.finalize(ptr, proj, "control", entry_type)
+
+array_add = OclAdd(None)
 
 
 class TestMetaDecorator(unittest.TestCase):
@@ -108,3 +114,16 @@ class TestMetaDecorator(unittest.TestCase):
             return a + 3
 
         self.assertEqual(func(3), 6)
+
+    def test_dataflow(self):
+        @meta
+        def func(a, b):
+            c = array_add(a, b)
+            return array_add(c, a)
+
+        a = np.random.rand(256, 256).astype(np.float32) * 100
+        b = np.random.rand(256, 256).astype(np.float32) * 100
+        try:
+            np.testing.assert_array_almost_equal(func(a, b), a + b + a)
+        except AssertionError as e:
+            self.fail("Arrays not almost equal\n{}".format(e))
