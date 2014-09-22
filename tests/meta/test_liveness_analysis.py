@@ -37,7 +37,8 @@ class TestLivenessAnalysis(unittest.TestCase):
         basic_block = perform_liveness_analysis(basic_block)
         self.assertEqual(basic_block[0].live_ins, {"a", "b"})
         self.assertEqual(basic_block[0].live_outs, {"c"})
-
+        self.assertEqual(basic_block[1].live_ins, {"c"})
+        self.assertEqual(basic_block[1].live_outs, set())
 
     def test_complex_multi_block(self):
         def func(a, b):
@@ -53,3 +54,5 @@ class TestLivenessAnalysis(unittest.TestCase):
         basic_block = perform_liveness_analysis(basic_block)
         self.assertEqual(basic_block[0].live_ins, {"a", "b"})
         self.assertEqual(basic_block[0].live_outs, {"c"})
+        self.assertEqual(basic_block[1].live_ins, {"c"})
+        self.assertEqual(basic_block[1].live_outs, set())
