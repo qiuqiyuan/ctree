@@ -43,7 +43,8 @@ class TestLivenessAnalysis(unittest.TestCase):
     def test_complex_multi_block(self):
         def func(a, b):
             c = array_add(a, b)
-            return c
+            d = array_add(c, b)
+            return 3 * d
 
         a = np.random.rand(256, 256).astype(np.float32) * 100
         b = np.random.rand(256, 256).astype(np.float32) * 100

@@ -154,27 +154,30 @@ def decompose(expr):
             body = ()
             operands = []
 
-            for operand in [expr.left, expr.right]:
-                if isinstance(operand, (ast.Name, ast.Num)):
-                    operands += (operand, )
-                else:
-                    tmp = gen_tmp()
-                    body += visit(operand,
-                                  ast.Name(tmp, ast.Store()))
-                    operands.append(ast.Name(tmp, ast.Load()))
-            if isinstance(expr.op, ast.Add):
-                op = ast.Attribute(operands[0], '__add__', ast.Load())
-            elif isinstance(expr.op, ast.Mult):
-                op = ast.Attribute(operands[0], '__mul__', ast.Load())
-            elif isinstance(expr.op, ast.Sub):
-                op = ast.Attribute(operands[0], '__sub__', ast.Load())
-            elif isinstance(expr.op, ast.Div):
-                op = ast.Attribute(operands[0], '__div__', ast.Load())
+            if isinstance(expr.left, ast.Num):
+                body += (ast.Assign([curr_target], expr), )
             else:
-                raise Exception("Unsupported BinOp {}".format(expr.op))
-            operands.pop(0)
-            body += (ast.Assign([curr_target],
-                                ast.Call(op, operands, [], None, None)), )
+                for operand in [expr.left, expr.right]:
+                    if isinstance(operand, (ast.Name, ast.Num)):
+                        operands += (operand, )
+                    else:
+                        tmp = gen_tmp()
+                        body += visit(operand,
+                                      ast.Name(tmp, ast.Store()))
+                        operands.append(ast.Name(tmp, ast.Load()))
+                if isinstance(expr.op, ast.Add):
+                    op = ast.Attribute(operands[0], '__add__', ast.Load())
+                elif isinstance(expr.op, ast.Mult):
+                    op = ast.Attribute(operands[0], '__mul__', ast.Load())
+                elif isinstance(expr.op, ast.Sub):
+                    op = ast.Attribute(operands[0], '__sub__', ast.Load())
+                elif isinstance(expr.op, ast.Div):
+                    op = ast.Attribute(operands[0], '__div__', ast.Load())
+                else:
+                    raise Exception("Unsupported BinOp {}".format(expr.op))
+                operands.pop(0)
+                body += (ast.Assign([curr_target],
+                                    ast.Call(op, operands, [], None, None)), )
         elif isinstance(expr, ast.Assign):
             target = expr.targets[0]
             body = visit(expr.value, target)

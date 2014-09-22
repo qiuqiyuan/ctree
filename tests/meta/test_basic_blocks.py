@@ -143,6 +143,14 @@ class TestBasicBlockBuilder(unittest.TestCase):
         self.assertIsInstance(basic_block[2], ast.Return)
         self.assertEqual(basic_block[2].value.id, '_t0')
 
+    def test_number_binop(self):
+        def f(a):
+            return 3 * a
+
+        tree = get_ast(f)
+        basic_block = get_basic_block(tree)
+        self.assertEqual(len(basic_block), 2)
+
 
 class TestBasicBlockPrint(unittest.TestCase):
     def _check(self, func, expected):
