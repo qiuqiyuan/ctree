@@ -4,7 +4,7 @@ from ctree.meta.basic_blocks import get_basic_block, separate_composable_blocks
 import unittest
 import numpy as np
 
-from array_add import array_add
+from .array_add import array_add
 
 
 class TestLivenessAnalysis(unittest.TestCase):

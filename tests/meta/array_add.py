@@ -1,3 +1,4 @@
+import numpy as np
 import pycl as cl
 import ctypes as ct
 
@@ -8,6 +9,7 @@ from ctree.c.nodes import FunctionCall, FunctionDecl, SymbolRef, Constant, \
 from ctree.templates.nodes import StringTemplate
 from ctree.ocl.nodes import OclFile
 from ctree.ocl.macros import clSetKernelArg, get_global_id, NULL
+
 import ctree.np
 
 

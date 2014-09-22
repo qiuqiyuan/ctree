@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from ctree.meta.core import meta
-from array_add import array_add
+from .array_add import array_add
 
 
 class TestMetaDecorator(unittest.TestCase):
