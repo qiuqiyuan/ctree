@@ -1,6 +1,7 @@
 from ctree.frontend import get_ast
 from .basic_blocks import get_basic_block, separate_composable_blocks, \
     process_composable_blocks
+from .liveness_analysis import perform_liveness_analysis
 import inspect
 import sys
 # from copy import deepcopy
@@ -8,6 +9,15 @@ import ast
 
 
 def meta(func):
+    """
+    Decorator entry point for meta-specializers
+    Example usage:
+        @meta
+        def func(a, b):
+            c = array_add(a, b)
+            d = array_sub(b, c)
+            return array_mul(d, c)
+    """
     original_ast = get_ast(func)
     orig_basic_block = get_basic_block(original_ast)
 
@@ -23,22 +33,31 @@ def meta(func):
                     symbol_table[name.arg] = arg
                 else:
                     symbol_table[name.id] = arg
-        basic_block = separate_composable_blocks(orig_basic_block, symbol_table)
+        basic_block = separate_composable_blocks(orig_basic_block,
+                                                 symbol_table)
+        basic_block = perform_liveness_analysis(basic_block)
         basic_block = process_composable_blocks(basic_block, symbol_table)
-        callable = get_callable(basic_block, symbol_table, args)
+        callable = get_callable(basic_block, symbol_table)
         return callable(*args, **kwargs)
 
     return meta_specialized
 
 
 def my_exec(func, env):
+    """
+    Special exec for handling Python 2 -> 3 syntax change
+    """
     if sys.version_info >= (3, 0):
         exec(func, env)
     else:
         exec(func) in env
 
 
-def get_callable(basic_block, env, args):
+def get_callable(basic_block, env):
+    """
+    Takes in a BasicBlock and returns a Python callable corresponding to its
+    body.
+    """
     if sys.version_info >= (3, 0):
         tree = ast.Module(
             [ast.FunctionDef(basic_block.name, basic_block.params,
