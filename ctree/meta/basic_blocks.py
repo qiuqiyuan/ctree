@@ -147,7 +147,7 @@ def decompose(expr):
             else:
                 tmp = gen_tmp()
                 body = visit(expr.value, ast.Name(tmp, ast.Store()))
-                body = (ast.Return(ast.Name(tmp, ast.Load())), )
+                body += (ast.Return(ast.Name(tmp, ast.Load())), )
         elif isinstance(expr, ast.Name):
             return expr
         elif isinstance(expr, ast.BinOp):
