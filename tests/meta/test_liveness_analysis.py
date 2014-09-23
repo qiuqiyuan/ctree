@@ -40,7 +40,6 @@ class TestLivenessAnalysis(unittest.TestCase):
         self.assertEqual(basic_block[1].live_ins, {"c"})
         self.assertEqual(basic_block[1].live_outs, set())
 
-    @unittest.skip("Not implemented yet")
     def test_complex_multi_block(self):
         def func(a, b):
             c = array_add(a, b)
@@ -55,6 +54,6 @@ class TestLivenessAnalysis(unittest.TestCase):
                                                  dict(locals(), **globals()))
         basic_block = perform_liveness_analysis(basic_block)
         self.assertEqual(basic_block[0].live_ins, {"a", "b"})
-        self.assertEqual(basic_block[0].live_outs, {"c"})
-        self.assertEqual(basic_block[1].live_ins, {"c"})
+        self.assertEqual(basic_block[0].live_outs, {"d"})
+        self.assertEqual(basic_block[1].live_ins, {"d"})
         self.assertEqual(basic_block[1].live_outs, set())
