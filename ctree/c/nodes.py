@@ -235,9 +235,10 @@ class SymbolRef(Literal):
         else:
             return SymbolRef(self.name)
 
+
 class FunctionDecl(Statement):
     """Cite me."""
-    _fields = ['params', 'defn']
+    _fields = ['params', 'name', 'defn']
 
     def __init__(self, return_type=None, name=None, params=None, defn=None):
         self.return_type = return_type
