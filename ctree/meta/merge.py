@@ -99,16 +99,10 @@ def merge_entry_points(composable_block, env):
     output_indexes = []
     for statement in composable_block.statements:
         for arg in statement.value.args:
-            if sys.version_info > (3, 0):
-                if arg.id in composable_block.live_ins and \
-                   arg.id not in seen_args:
-                    seen_args.add(arg.id)
-                    args.append(arg)
-            else:
-                if arg.arg in composable_block.live_ins and \
-                   arg.arg not in seen_args:
-                    seen_args.add(arg.arg)
-                    args.append(arg)
+            if arg.id in composable_block.live_ins and \
+               arg.id not in seen_args:
+                seen_args.add(arg.id)
+                args.append(arg)
         specializer = env[statement.value.func.id]
         placeholder_output = specializer.get_placeholder_output(
             tuple(env[arg.id] for arg in statement.value.args))
