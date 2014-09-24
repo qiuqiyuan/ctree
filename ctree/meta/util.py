@@ -1,5 +1,7 @@
 __author__ = 'leonardtruong'
 
+import ast
+
 
 class SymbolTable(dict):
     """
@@ -33,3 +35,64 @@ class SymbolTable(dict):
             return True
         except KeyError:
             return False
+
+
+class UniqueNamer(ast.NodeTransformer):
+    curr = -1
+
+    def __init__(self):
+        self.seen = {}
+
+    def gen_tmp(self):
+        UniqueNamer.curr += 1
+        return "_f{}".format(UniqueNamer.curr)
+
+    def visit_FunctionCall(self, node):
+        node.args = [self.visit(arg) for arg in node.args]
+        return node
+
+    def visit_SymbolRef(self, node):
+        if node.name == 'NULL':
+            return node
+        if node.name not in self.seen:
+            self.seen[node.name] = self.gen_tmp()
+        node.name = self.seen[node.name]
+        return node
+
+
+def get_unique_func_name(env):
+    cnt = 0
+    name = "_merged_f0"
+    while name in env:
+        cnt += 1
+        name = "_merged_f{}".format(cnt)
+    return name
+
+
+class EntryPointFinder(ast.NodeVisitor):
+    def __init__(self, entry_name):
+        self.entry_name = entry_name
+        self.entry_point = None
+
+    def visit_FunctionDecl(self, node):
+        if node.name.name == self.entry_name:
+            self.entry_point = node
+
+
+def find_entry_point(entry_name, tree):
+    finder = EntryPointFinder(entry_name)
+    finder.visit(tree)
+    if not finder.entry_point:
+        raise Exception("Could not find entry point {}".format(entry_name))
+    return finder.entry_point
+
+
+class SymbolReplacer(ast.NodeTransformer):
+    def __init__(self, old, new):
+        self._old = old
+        self._new = new
+
+    def visit_SymbolRef(self, node):
+        if node.name == self._old:
+            node.name = self._new
+        return node

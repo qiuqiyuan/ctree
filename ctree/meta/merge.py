@@ -7,69 +7,10 @@ import pycl as cl
 import ctypes as ct
 import numpy as np
 from ctree.nodes import Project
+from .util import get_unique_func_name, UniqueNamer, find_entry_point, \
+    SymbolReplacer
 
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-
-
-class UniqueNamer(ast.NodeTransformer):
-    curr = -1
-
-    def __init__(self):
-        self.seen = {}
-
-    def gen_tmp(self):
-        UniqueNamer.curr += 1
-        return "_f{}".format(UniqueNamer.curr)
-
-    def visit_FunctionCall(self, node):
-        node.args = [self.visit(arg) for arg in node.args]
-        return node
-
-    def visit_SymbolRef(self, node):
-        if node.name == 'NULL':
-            return node
-        if node.name not in self.seen:
-            self.seen[node.name] = self.gen_tmp()
-        node.name = self.seen[node.name]
-        return node
-
-
-def get_unique_name(env):
-    cnt = 0
-    name = "_merged_f0"
-    while name in env:
-        cnt += 1
-        name = "merged_f{}".format(cnt)
-    return name
-
-
-class EntryPointFinder(ast.NodeVisitor):
-    def __init__(self, entry_name):
-        self.entry_name = entry_name
-        self.entry_point = None
-
-    def visit_FunctionDecl(self, node):
-        if node.name.name == self.entry_name:
-            self.entry_point = node
-
-
-def find_entry_point(entry_name, tree):
-    finder = EntryPointFinder(entry_name)
-    finder.visit(tree)
-    if not finder.entry_point:
-        raise Exception("Could not find entry point {}".format(entry_name))
-    return finder.entry_point
-
-
-class SymbolReplacer(ast.NodeTransformer):
-    def __init__(self, old, new):
-        self._old = old
-        self._new = new
-
-    def visit_SymbolRef(self, node):
-        if node.name == self._old:
-            node.name = self._new
-        return node
 
 
 class ConcreteMerged(ConcreteSpecializedFunction):
@@ -99,8 +40,8 @@ class ConcreteMerged(ConcreteSpecializedFunction):
                 processed.append(self.queue)
             elif argtype is cl.cl_kernel:
                 kernel = self.__kernels[kernel_index]
-                program = cl.clCreateProgramWithSource(self.context,
-                                                       kernel[1].codegen()).build()
+                program = cl.clCreateProgramWithSource(
+                    self.context, kernel[1].codegen()).build()
                 processed.append(program[kernel[0]])
             elif index + 1 in self.__outputs:
                 buf, evt = cl.buffer_from_ndarray(self.queue,
@@ -119,7 +60,7 @@ class ConcreteMerged(ConcreteSpecializedFunction):
         cl.clWaitForEvents(*events)
         self._c_function(*processed)
         buf, evt = cl.buffer_to_ndarray(self.queue, outputs[-1], like=args[0],
-                                    blocking=True)
+                                        blocking=True)
         evt.wait()
         return buf
 
@@ -136,7 +77,8 @@ class MergedSpecializedFunction(LazySpecializedFunction):
     def transform(self, tree, program_config):
         fn = ConcreteMerged()
         return fn.finalize(self.__original_tree, self.__entry_name,
-                           self.__entry_type, self.__kernels, self.__output_indexes)
+                           self.__entry_type, self.__kernels,
+                           self.__output_indexes)
 
 
 def replace_symbol_in_tree(tree, old, new):
@@ -168,8 +110,6 @@ def merge_entry_points(composable_block, env):
                     seen_args.add(arg.arg)
                     args.append(arg)
         specializer = env[statement.value.func.id]
-        program_cfg = specializer.args_to_subconfig(
-            tuple(env[arg.id] for arg in statement.value.args))
         placeholder_output = specializer.get_placeholder_output(
             tuple(env[arg.id] for arg in statement.value.args))
         mergeable_info = specializer.get_mergeable_info(
@@ -184,7 +124,8 @@ def merge_entry_points(composable_block, env):
         uniquifier.visit(proj)
         unique_entry = uniquifier.seen[entry_point]
         if statement.targets[0].id in uniquifier.seen:
-            param_map[statement.targets[0].id] = uniquifier.seen[statement.targets[0].id]
+            param_map[statement.targets[0].id] = \
+                uniquifier.seen[statement.targets[0].id]
         merged_kernels.extend((uniquifier.seen[kernel[0]], kernel[1])
                               for kernel in kernels)
         entry_point = find_entry_point(unique_entry, proj)
@@ -214,18 +155,19 @@ def merge_entry_points(composable_block, env):
         point.delete()
 
     targets = [ast.Name(id, ast.Store()) for id in composable_block.live_outs]
-    merged_name = get_unique_name(env)
+    merged_name = get_unique_func_name(env)
     env[merged_name] = MergedSpecializedFunction(Project(files),
                                                  merged_entry.name.name,
                                                  merged_entry_type,
-                                                 merged_kernels, output_indexes)
+                                                 merged_kernels,
+                                                 output_indexes)
     value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)
     return ast.Assign(targets, value)
 
 
 class MergeableInfo(object):
     def __init__(self, proj=None, entry_point=None, entry_type=None,
-                  kernels=None):
+                 kernels=None):
         self.proj = proj
         self.entry_point = entry_point
         self.entry_type = entry_type
