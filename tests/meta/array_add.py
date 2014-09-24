@@ -2,6 +2,8 @@ import numpy as np
 import pycl as cl
 import ctypes as ct
 
+from copy import deepcopy
+
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.nodes import Project
 from ctree.c.nodes import FunctionCall, FunctionDecl, SymbolRef, Constant, \
@@ -9,8 +11,11 @@ from ctree.c.nodes import FunctionCall, FunctionDecl, SymbolRef, Constant, \
 from ctree.templates.nodes import StringTemplate
 from ctree.ocl.nodes import OclFile
 from ctree.ocl.macros import clSetKernelArg, get_global_id, NULL
+from ctree.meta.basic_blocks import MergeableInfo
 
 import ctree.np
+
+ctree.np  # Make pep happy
 
 
 class OclFunc(ConcreteSpecializedFunction):
@@ -52,7 +57,7 @@ class OclAdd(LazySpecializedFunction):
         # inner_type = A.__dtype__.type()
 
         kernel = FunctionDecl(
-            None, "add_kernel",
+            None, SymbolRef("add_kernel"),
             params=[SymbolRef("A", A()).set_global(),
                     SymbolRef("B", B()).set_global(),
                     SymbolRef("C", C()).set_global()],
@@ -72,11 +77,12 @@ class OclAdd(LazySpecializedFunction):
                 #endif
             """),
             FunctionDecl(
-                None, 'control', params=[SymbolRef('queue', cl.cl_command_queue()),
-                              SymbolRef('kernel', cl.cl_kernel()),
-                              SymbolRef('a', cl.cl_mem()),
-                              SymbolRef('b', cl.cl_mem()),
-                              SymbolRef('c', cl.cl_mem())],
+                None, SymbolRef('control'),
+                params=[SymbolRef('queue', cl.cl_command_queue()),
+                        SymbolRef('kernel', cl.cl_kernel()),
+                        SymbolRef('a', cl.cl_mem()),
+                        SymbolRef('b', cl.cl_mem()),
+                        SymbolRef('c', cl.cl_mem())],
                 defn=[
                     Assign(SymbolRef('global', ct.c_ulong()), Constant(len_A)),
                     Assign(SymbolRef('local', ct.c_ulong()), Constant(32)),
@@ -94,13 +100,33 @@ class OclAdd(LazySpecializedFunction):
         ]
 
         proj = Project([file, CFile('control', control)])
-        print(proj.files[1])
+        # print(proj.files[1])
+        entry_type = [None, cl.cl_command_queue, cl.cl_kernel, cl.cl_mem,
+                      cl.cl_mem, cl.cl_mem]
+        return proj, "control", entry_type
+
+    def finalize(self, ptr, proj, entry_point, entry_type):
         fn = OclFunc()
         program = cl.clCreateProgramWithSource(fn.context,
-                                               kernel.codegen()).build()
+                                               proj.files[0].codegen()).build()
         ptr = program['add_kernel']
-        entry_type = ct.CFUNCTYPE(None, cl.cl_command_queue, cl.cl_kernel,
-                                  cl.cl_mem, cl.cl_mem, cl.cl_mem)
-        return fn.finalize(ptr, proj, "control", entry_type)
+        return fn.finalize(ptr, proj, "control", ct.CFUNCTYPE(entry_type))
+
+    def get_placeholder_output(self, args):
+        return np.zeros_like(args[0])
+
+    def get_mergeable_info(self, args):
+        arg_cfg = self.args_to_subconfig(args)
+        tune_cfg = self.get_tuning_driver()
+        program_cfg = (arg_cfg, tune_cfg)
+        tree = deepcopy(self.original_tree)
+        proj, entry_point, entry_type = self.transform(tree, program_cfg)
+        return MergeableInfo(
+            proj=proj,
+            entry_point=entry_point,
+            entry_type=entry_type,
+            # TODO: This should use a namedtuple or object to be more explicit
+            kernels=[("add_kernel", proj.files[0])]
+        )
 
 array_add = OclAdd(None)

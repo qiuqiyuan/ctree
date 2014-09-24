@@ -76,6 +76,8 @@ setup(
         'numpy',
         'mako',
         'pyserial',
+        'pycl',
+        'llvmpy'
         # 'readline',
     ],
 
