@@ -28,7 +28,6 @@ class TestMetaDecorator(unittest.TestCase):
         b = np.random.rand(256, 256).astype(np.float32) * 100
         self._check_arrays_equal(func(a, b), a + b + a)
 
-    @unittest.skip("not implemented")
     def test_dataflow_2(self):
         @meta
         def func(a, b):

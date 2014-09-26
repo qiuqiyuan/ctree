@@ -1,7 +1,6 @@
 __author__ = 'leonardtruong'
 
 import ast
-import sys
 from ctree.ocl import get_context_and_queue_from_devices
 import pycl as cl
 import ctypes as ct
@@ -117,15 +116,14 @@ def merge_entry_points(composable_block, env):
         uniquifier = UniqueNamer()
         uniquifier.visit(proj)
         unique_entry = uniquifier.seen[entry_point]
-        if statement.targets[0].id in uniquifier.seen:
-            param_map[statement.targets[0].id] = \
-                uniquifier.seen[statement.targets[0].id]
         merged_kernels.extend((uniquifier.seen[kernel[0]], kernel[1])
                               for kernel in kernels)
         entry_point = find_entry_point(unique_entry, proj)
+        param_map[statement.targets[0].id] = entry_point.params[-1].name
         entry_points.append(entry_point)
         to_remove_symbols = set()
         to_remove_types = set()
+        print(param_map)
         for index, arg in enumerate(statement.value.args):
             if arg.id in param_map:
                 param = entry_point.params[index + 2].name
@@ -150,6 +148,8 @@ def merge_entry_points(composable_block, env):
 
     targets = [ast.Name(id, ast.Store()) for id in composable_block.live_outs]
     merged_name = get_unique_func_name(env)
+    for file in files:
+        print(file)
     env[merged_name] = MergedSpecializedFunction(Project(files),
                                                  merged_entry.name.name,
                                                  merged_entry_type,
