@@ -35,4 +35,5 @@ def perform_liveness_analysis(basic_block):
                   in basic_block[len(basic_block) - index:]))
         sub_block.live_ins = analyzer.gen.union(
             sub_block.live_outs.difference(analyzer.kill))
+        sub_block.kill = analyzer.kill
     return basic_block

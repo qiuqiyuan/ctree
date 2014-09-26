@@ -70,6 +70,8 @@ def get_callable(basic_block, env):
                              list(basic_block.body), [])]
         )
     ast.fix_missing_locations(tree)
+    import ctree
+    ctree.browser_show_ast(tree, 'tmp.png')
     # TODO: We have to pass in the real env dict here, is this problematic?
     my_exec(compile(tree, filename="tmp", mode="exec"), env._env)
     return env[basic_block.name]

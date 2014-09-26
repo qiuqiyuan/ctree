@@ -88,6 +88,10 @@ def replace_symbol_in_tree(tree, old, new):
 
 
 def merge_entry_points(composable_block, env):
+    """
+    A hideosly complex function that needs to be cleaned up and modularized
+    Proceed at your own risk.
+    """
     args = []
     merged_entry_type = [None]
     entry_points = []
@@ -123,7 +127,6 @@ def merge_entry_points(composable_block, env):
         entry_points.append(entry_point)
         to_remove_symbols = set()
         to_remove_types = set()
-        print(param_map)
         for index, arg in enumerate(statement.value.args):
             if arg.id in param_map:
                 param = entry_point.params[index + 2].name
@@ -147,9 +150,11 @@ def merge_entry_points(composable_block, env):
         point.delete()
 
     targets = [ast.Name(id, ast.Store()) for id in composable_block.live_outs]
+    targets = [
+        ast.Name(id, ast.Store())
+        for id in composable_block.live_outs.intersection(
+                composable_block.kill)]
     merged_name = get_unique_func_name(env)
-    for file in files:
-        print(file)
     env[merged_name] = MergedSpecializedFunction(Project(files),
                                                  merged_entry.name.name,
                                                  merged_entry_type,

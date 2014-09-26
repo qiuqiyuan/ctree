@@ -42,3 +42,24 @@ class TestMetaDecorator(unittest.TestCase):
         d = c + b
         expected = d + c
         self._check_arrays_equal(actual, expected)
+
+    def test_multiblock_dataflow(self):
+        @meta
+        def func(a, b):
+            c = array_add(a, b)
+            d = array_add(c, b)
+            e = a + d
+            f = array_add(d, d)
+            g = array_add(f, b)
+            return a + g
+
+        a = np.random.rand(256, 256).astype(np.float32) * 100
+        b = np.random.rand(256, 256).astype(np.float32) * 100
+        actual = func(a, b)
+        c = a + b
+        d = c + b
+        e = a + d
+        f = d + d
+        g = f + b
+        expected = a + g
+        self._check_arrays_equal(actual, expected)
