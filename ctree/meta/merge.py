@@ -22,6 +22,8 @@ class ConcreteMerged(ConcreteSpecializedFunction):
 
     def finalize(self, proj, entry_name, entry_type, kernels, outputs):
         self.__entry_type = entry_type
+        for file in proj.files:
+            print(file)
         self._c_function = self._compile(entry_name, proj,
                                          ct.CFUNCTYPE(*entry_type))
         self.__kernels = kernels
@@ -42,7 +44,7 @@ class ConcreteMerged(ConcreteSpecializedFunction):
                 program = cl.clCreateProgramWithSource(
                     self.context, kernel[1].codegen()).build()
                 processed.append(program[kernel[0]])
-            elif index + 1 in self.__outputs:
+            elif index in self.__outputs:
                 buf, evt = cl.buffer_from_ndarray(self.queue,
                                                   np.zeros_like(args[0]),
                                                   blocking=False)
@@ -58,9 +60,11 @@ class ConcreteMerged(ConcreteSpecializedFunction):
                 arg_index += 1
         cl.clWaitForEvents(*events)
         self._c_function(*processed)
+
         buf, evt = cl.buffer_to_ndarray(self.queue, outputs[-1], like=args[0],
                                         blocking=True)
         evt.wait()
+        print(buf)
         return buf
 
 
@@ -93,7 +97,7 @@ def merge_entry_points(composable_block, env):
     Proceed at your own risk.
     """
     args = []
-    merged_entry_type = [None]
+    merged_entry_type = []
     entry_points = []
     param_map = {}
     seen_args = set()
@@ -143,23 +147,20 @@ def merge_entry_points(composable_block, env):
         output_indexes.append(len(merged_entry_type) - 1)
         # entry_points.append(find_entry_point(entry_point, proj))
 
+    merged_entry_type.insert(0, None)
     merged_entry = entry_points.pop(0)
     for point in entry_points:
         merged_entry.params.extend(point.params)
         merged_entry.defn.extend(point.defn)
         point.delete()
 
-    targets = [ast.Name(id, ast.Store()) for id in composable_block.live_outs]
-    targets = [
-        ast.Name(id, ast.Store())
-        for id in composable_block.live_outs.intersection(
-                composable_block.kill)]
+    target_ids = composable_block.live_outs.intersection(composable_block.kill)
+    targets = [ast.Name(id, ast.Store()) for id in target_ids]
     merged_name = get_unique_func_name(env)
-    env[merged_name] = MergedSpecializedFunction(Project(files),
-                                                 merged_entry.name.name,
-                                                 merged_entry_type,
-                                                 merged_kernels,
-                                                 output_indexes)
+    env[merged_name] = MergedSpecializedFunction(
+        Project(files), merged_entry.name.name, merged_entry_type,
+        merged_kernels, output_indexes
+    )
     value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)
     return ast.Assign(targets, value)
 

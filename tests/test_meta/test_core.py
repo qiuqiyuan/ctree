@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 from ctree.meta.core import meta
 from .array_add import array_add
+from .simple_stencil import simple_stencil
 
 
 class TestMetaDecorator(unittest.TestCase):
@@ -62,4 +63,15 @@ class TestMetaDecorator(unittest.TestCase):
         f = d + d
         g = f + b
         expected = a + g
+        self._check_arrays_equal(actual, expected)
+
+    def test_simple_stencil(self):
+        @meta
+        def func(a):
+            b = simple_stencil(a)
+            return simple_stencil(b)
+
+        a = np.random.rand(1024).astype(np.float32) * 100
+        actual = func(a)
+        expected = simple_stencil(simple_stencil(a))
         self._check_arrays_equal(actual, expected)

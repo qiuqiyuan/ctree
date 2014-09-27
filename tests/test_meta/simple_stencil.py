@@ -7,7 +7,7 @@ from copy import deepcopy
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.nodes import Project
 from ctree.c.nodes import FunctionCall, FunctionDecl, SymbolRef, Constant, \
-    Assign, ArrayRef, Add, Ref, CFile
+    Assign, ArrayRef, Add, Ref, CFile, AddAssign, Sub, Cast
 from ctree.templates.nodes import StringTemplate
 from ctree.ocl.nodes import OclFile
 from ctree.ocl.macros import clSetKernelArg, get_global_id, NULL
@@ -28,21 +28,19 @@ class OclFunc(ConcreteSpecializedFunction):
         self._c_function = self._compile(entry_name, tree, entry_type)
         return self
 
-    def __call__(self, A, B):
+    def __call__(self, A):
         a_buf, evt = cl.buffer_from_ndarray(self.queue, A, blocking=False)
         evt.wait()
+        B = np.zeros_like(A)
         b_buf, evt = cl.buffer_from_ndarray(self.queue, B, blocking=False)
         evt.wait()
-        C = np.zeros_like(A)
-        c_buf, evt = cl.buffer_from_ndarray(self.queue, C, blocking=False)
+        self._c_function(self.queue, self.kernel, a_buf, b_buf)
+        _, evt = cl.buffer_to_ndarray(self.queue, b_buf, B)
         evt.wait()
-        self._c_function(self.queue, self.kernel, a_buf, b_buf, c_buf)
-        _, evt = cl.buffer_to_ndarray(self.queue, c_buf, C)
-        evt.wait()
-        return C
+        return B
 
 
-class OclAdd(LazySpecializedFunction):
+class SimpleStencil(LazySpecializedFunction):
     def args_to_subconfig(self, args):
         A = args[0]
         return tuple(np.ctypeslib.ndpointer(A.dtype, A.ndim, A.shape)
@@ -52,18 +50,33 @@ class OclAdd(LazySpecializedFunction):
         arg_cfg = program_config[0]
         A = arg_cfg[0]
         B = arg_cfg[1]
-        C = arg_cfg[2]
         len_A = np.prod(A._shape_)
         # inner_type = A.__dtype__.type()
 
         kernel = FunctionDecl(
-            None, SymbolRef("add_kernel"),
+            None, SymbolRef("stencil_kernel"),
             params=[SymbolRef("A", A()).set_global(),
-                    SymbolRef("B", B()).set_global(),
-                    SymbolRef("C", C()).set_global()],
-            defn=[Assign(ArrayRef(SymbolRef("C"), get_global_id(0)),
-                         Add(ArrayRef(SymbolRef('A'), get_global_id(0)),
-                             ArrayRef(SymbolRef('B'), get_global_id(0))))]
+                    SymbolRef("B", B()).set_global()],
+            defn=[Assign(ArrayRef(SymbolRef("B"), get_global_id(0)),
+                         ArrayRef(SymbolRef('A'), get_global_id(0))),
+                  AddAssign(ArrayRef(SymbolRef("B"), get_global_id(0)),
+                            ArrayRef(
+                                SymbolRef('A'),
+                                FunctionCall(SymbolRef('clamp'),
+                                             [Cast(ct.c_int(),
+                                                   Add(get_global_id(0),
+                                                       Constant(1))),
+                                              Constant(0),
+                                              Constant(len_A - 1)]))),
+                  AddAssign(ArrayRef(SymbolRef("B"), get_global_id(0)),
+                            ArrayRef(
+                                SymbolRef('A'),
+                                FunctionCall(SymbolRef('clamp'),
+                                             [Cast(ct.c_int(),
+                                                   Sub(get_global_id(0),
+                                                       Constant(1))),
+                                              Constant(0),
+                                              Constant(len_A - 1)])))]
         ).set_kernel()
 
         file = OclFile("kernel", [kernel])
@@ -81,14 +94,12 @@ class OclAdd(LazySpecializedFunction):
                 params=[SymbolRef('queue', cl.cl_command_queue()),
                         SymbolRef('kernel', cl.cl_kernel()),
                         SymbolRef('a', cl.cl_mem()),
-                        SymbolRef('b', cl.cl_mem()),
-                        SymbolRef('c', cl.cl_mem())],
+                        SymbolRef('b', cl.cl_mem())],
                 defn=[
                     Assign(SymbolRef('global', ct.c_ulong()), Constant(len_A)),
                     Assign(SymbolRef('local', ct.c_ulong()), Constant(32)),
                     clSetKernelArg('kernel', 0, ct.sizeof(cl.cl_mem), 'a'),
                     clSetKernelArg('kernel', 1, ct.sizeof(cl.cl_mem), 'b'),
-                    clSetKernelArg('kernel', 2, ct.sizeof(cl.cl_mem), 'c'),
                     FunctionCall(SymbolRef('clEnqueueNDRangeKernel'),
                                  [SymbolRef('queue'), SymbolRef('kernel'),
                                   Constant(1), Constant(0),
@@ -102,14 +113,14 @@ class OclAdd(LazySpecializedFunction):
         proj = Project([file, CFile('control', control)])
         # print(proj.files[1])
         entry_type = [None, cl.cl_command_queue, cl.cl_kernel, cl.cl_mem,
-                      cl.cl_mem, cl.cl_mem]
+                      cl.cl_mem]
         return proj, "control", entry_type
 
     def finalize(self, proj, entry_point, entry_type):
         fn = OclFunc()
-        program = cl.clCreateProgramWithSource(fn.context,
-                                               proj.files[0].codegen()).build()
-        ptr = program['add_kernel']
+        program = cl.clCreateProgramWithSource(
+            fn.context, proj.files[0].codegen()).build()
+        ptr = program['stencil_kernel']
         return fn.finalize(ptr, proj, "control", ct.CFUNCTYPE(*entry_type))
 
     def get_placeholder_output(self, args):
@@ -126,7 +137,7 @@ class OclAdd(LazySpecializedFunction):
             entry_point=entry_point,
             entry_type=entry_type,
             # TODO: This should use a namedtuple or object to be more explicit
-            kernels=[("add_kernel", proj.files[0])]
+            kernels=[("stencil_kernel", proj.files[0])]
         )
 
-array_add = OclAdd(None)
+simple_stencil = SimpleStencil(None)
