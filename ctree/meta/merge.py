@@ -42,8 +42,8 @@ class ConcreteMerged(ConcreteSpecializedFunction):
             elif argtype is cl.cl_kernel:
                 kernel = self.__kernels[kernel_index]
                 program = cl.clCreateProgramWithSource(
-                    self.context, kernel[1].codegen()).build()
-                processed.append(program[kernel[0]])
+                    self.context, kernel.codegen()).build()
+                processed.append(program[kernel.body[0].name.name])
             elif index in self.__outputs:
                 buf, evt = cl.buffer_from_ndarray(self.queue,
                                                   np.zeros_like(args[0]),
@@ -91,68 +91,97 @@ def replace_symbol_in_tree(tree, old, new):
     return tree
 
 
-def merge_entry_points(composable_block, env):
-    """
-    A hideosly complex function that needs to be cleaned up and modularized
-    Proceed at your own risk.
-    """
-    args = []
-    merged_entry_type = []
-    entry_points = []
-    param_map = {}
-    seen_args = set()
-    files = []
-    merged_kernels = []
-    output_indexes = []
-    for statement in composable_block.statements:
-        for arg in statement.value.args:
-            if arg.id in composable_block.live_ins and \
-               arg.id not in seen_args:
-                seen_args.add(arg.id)
-                args.append(arg)
-        specializer = env[statement.value.func.id]
-        placeholder_output = specializer.get_placeholder_output(
-            tuple(env[arg.id] for arg in statement.value.args))
-        mergeable_info = specializer.get_mergeable_info(
-            tuple(env[arg.id] for arg in statement.value.args))
-        env[statement.targets[0].id] = placeholder_output
-        proj = mergeable_info.proj
-        entry_point = mergeable_info.entry_point
-        entry_type = mergeable_info.entry_type
-        kernels = mergeable_info.kernels
-        files.extend(proj.files)
-        uniquifier = UniqueNamer()
-        uniquifier.visit(proj)
-        unique_entry = uniquifier.seen[entry_point]
-        merged_kernels.extend((uniquifier.seen[kernel[0]], kernel[1])
-                              for kernel in kernels)
-        entry_point = find_entry_point(unique_entry, proj)
-        param_map[statement.targets[0].id] = entry_point.params[-1].name
-        entry_points.append(entry_point)
-        to_remove_symbols = set()
-        to_remove_types = set()
-        for index, arg in enumerate(statement.value.args):
-            if arg.id in param_map:
-                param = entry_point.params[index + 2].name
-                to_remove_symbols.add(param)
-                to_remove_types.add(index + 3)
-                replace_symbol_in_tree(entry_point, param, param_map[arg.id])
-            else:
-                param_map[arg.id] = entry_point.params[index + 2].name
-        entry_point.params = [p for p in entry_point.params
-                              if p.name not in to_remove_symbols]
-        entry_type = [type for index, type in enumerate(entry_type)
-                      if index not in to_remove_types]
-        merged_entry_type.extend(entry_type[1:])
-        output_indexes.append(len(merged_entry_type) - 1)
-        # entry_points.append(find_entry_point(entry_point, proj))
-
-    merged_entry_type.insert(0, None)
+def perform_merge(entry_points):
     merged_entry = entry_points.pop(0)
     for point in entry_points:
         merged_entry.params.extend(point.params)
         merged_entry.defn.extend(point.defn)
         point.delete()
+    return merged_entry
+
+
+def remove_seen_symbols(args, param_map, entry_point, entry_type):
+    to_remove_symbols = set()
+    to_remove_types = set()
+    for index, arg in enumerate(args):
+        if arg.id in param_map:
+            param = entry_point.params[index + 2].name
+            to_remove_symbols.add(param)
+            to_remove_types.add(index + 3)
+            replace_symbol_in_tree(entry_point, param, param_map[arg.id])
+        else:
+            param_map[arg.id] = entry_point.params[index + 2].name
+    entry_point.params = [p for p in entry_point.params
+                          if p.name not in to_remove_symbols]
+    return [type for index, type in enumerate(entry_type)
+            if index not in to_remove_types]
+
+
+def get_merged_arguments(block):
+    args = []
+    seen_args = set()
+    for statement in block.statements:
+        for arg in statement.value.args:
+            if arg.id in block.live_ins and \
+               arg.id not in seen_args:
+                seen_args.add(arg.id)
+                args.append(arg)
+    return args
+
+
+def fuse_nodes(prev, next):
+    """TODO: Docstring for fuse_nodes.
+
+    :prev: TODO
+    :next: TODO
+    :returns: TODO
+
+    """
+    return next
+
+
+def merge_entry_points(composable_block, env):
+    """
+    A hideosly complex function that needs to be cleaned up and modularized
+    Proceed at your own risk.
+    """
+    args = get_merged_arguments(composable_block)
+    merged_entry_type = []
+    entry_points = []
+    param_map = {}
+    files = []
+    merged_kernels = []
+    output_indexes = []
+    curr_fusable = None
+    for statement in composable_block.statements:
+        specializer = env[statement.value.func.id]
+        output_name = statement.targets[0].id
+        arg_vals = tuple(env[arg.id] for arg in statement.value.args)
+        env[output_name] = specializer.get_placeholder_output(arg_vals)
+        mergeable_info = specializer.get_mergeable_info(arg_vals)
+        proj, entry_point, entry_type, kernels = mergeable_info.proj, \
+            mergeable_info.entry_point, mergeable_info.entry_type, \
+            mergeable_info.kernels
+        files.extend(proj.files)
+        uniquifier = UniqueNamer()
+        uniquifier.visit(proj)
+        merged_kernels.extend(kernels)
+        entry_point = find_entry_point(uniquifier.seen[entry_point], proj)
+        param_map[output_name] = entry_point.params[-1].name
+        entry_points.append(entry_point)
+        entry_type = remove_seen_symbols(statement.value.args, param_map,
+                                         entry_point, entry_type)
+        merged_entry_type.extend(entry_type[1:])
+        output_indexes.append(len(merged_entry_type) - 1)
+        fusable_nodes = mergeable_info.fusable_nodes
+        if fusable_nodes is not None:
+            if curr_fusable is None:
+                curr_fusable = fusable_nodes[-1]
+            else:
+                fuse_nodes(curr_fusable, fusable_nodes[0])
+
+    merged_entry_type.insert(0, None)
+    merged_entry = perform_merge(entry_points)
 
     target_ids = composable_block.live_outs.intersection(composable_block.kill)
     targets = [ast.Name(id, ast.Store()) for id in target_ids]
@@ -167,8 +196,44 @@ def merge_entry_points(composable_block, env):
 
 class MergeableInfo(object):
     def __init__(self, proj=None, entry_point=None, entry_type=None,
-                 kernels=None):
+                 kernels=None, fusable_nodes=None):
         self.proj = proj
         self.entry_point = entry_point
         self.entry_type = entry_type
         self.kernels = kernels
+        self.fusable_nodes = fusable_nodes
+
+
+class FusableNode(object):
+    pass
+
+
+class FusableKernel(FusableNode):
+    def __init__(self, local_size, global_size, arg_setters, enqueue_call,
+                 kernel_decl, global_loads, global_stores,
+                 loop_dependence_vectors):
+        """
+
+        :param local_size:
+        :type ctree.c.nodes.Assign:
+        :param global_size ctree.c.nodes.Assign:
+        :param arg_setters list[ctree.c.nodes.FunctionCall]:
+        :param enqueue_call ctree.c.nodes.FunctionCall:
+        :param kernel_decl ctree.c.nodes.FunctionDecl:
+        :param global_loads list[SymbolRef]:
+        :param global_stores list[ctree.c.nodes.Assign]:
+        :param loop_dependence_vectors list[LoopDependenceVector]:
+        """
+        self.local_size = global_size
+        self.global_size = global_size
+        self.arg_setters = arg_setters
+        self.enqueue_call = enqueue_call
+        self.kernel_decl = kernel_decl
+        self.global_loads = global_loads
+        self.global_stores = global_stores
+        self.loop_dependence_vectors = loop_dependence_vectors
+
+
+class LoopDependencVector(object):
+    def __init__(self, *args):
+        self.value = args

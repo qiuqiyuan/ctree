@@ -137,7 +137,7 @@ class SimpleStencil(LazySpecializedFunction):
             entry_point=entry_point,
             entry_type=entry_type,
             # TODO: This should use a namedtuple or object to be more explicit
-            kernels=[("stencil_kernel", proj.files[0])]
+            kernels=[proj.files[0]]
         )
 
 simple_stencil = SimpleStencil(None)
