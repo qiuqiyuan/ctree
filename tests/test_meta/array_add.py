@@ -136,7 +136,8 @@ class OclAdd(LazySpecializedFunction):
             entry_type=entry_type,
             # TODO: This should use a namedtuple or object to be more explicit
             kernels=[kernel],
-            fusable_nodes=[FusableKernel(local_size, global_size, arg_setters,
+            fusable_nodes=[FusableKernel((32,), (global_size.right.value,),
+                                         arg_setters,
                                          enqueue_call, kernel_decl,
                                          global_loads, global_stores,
                                          [LoopDependence(0, (0, )),

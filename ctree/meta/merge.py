@@ -127,6 +127,21 @@ def get_merged_arguments(block):
     return args
 
 
+def fusable(node_1, node_2):
+    if len(node_1.local_size) != len(node_2.local_size) or \
+       len(node_1.global_size) != len(node_2.global_size):
+        return False
+    for i in range(len(node_1.global_size)):
+        if node_1.local_size[i] != node_2.local_size[i] or \
+           node_1.global_size[i] != node_2.global_size[i]:
+            return False
+    for dependence in node_1.loop_dependencies:
+        for dim in dependence.vector:
+            if dim != 0:
+                return False
+    return True
+
+
 def fuse_nodes(prev, next):
     """TODO: Docstring for fuse_nodes.
 
@@ -135,8 +150,7 @@ def fuse_nodes(prev, next):
     :returns: TODO
 
     """
-    if prev.local_size and next.local_size and \
-       prev.global_size and next.global_size:
+    if fusable(prev, next):
         incr = len(prev.arg_setters)
         for setter in next.arg_setters:
             setter.args[1].value += incr
@@ -148,10 +162,6 @@ def fuse_nodes(prev, next):
             next.kernel_decl.params
         next.kernel_decl.defn = prev.kernel_decl.defn + next.kernel_decl.defn
         prev.enqueue_call.delete()
-    for setter in prev.arg_setters:
-        print(setter)
-    for setter in next.arg_setters:
-        print(setter)
 
 
 def merge_entry_points(composable_block, env):
