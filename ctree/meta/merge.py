@@ -102,13 +102,13 @@ def remove_seen_symbols(args, param_map, entry_point, entry_type):
     to_remove_symbols = set()
     to_remove_types = set()
     for index, arg in enumerate(args):
-        if arg.id in param_map:
+        if arg in param_map:
             param = entry_point.params[index + 2].name
             to_remove_symbols.add(param)
             to_remove_types.add(index + 3)
-            replace_symbol_in_tree(entry_point, param, param_map[arg.id])
+            replace_symbol_in_tree(entry_point, param, param_map[arg])
         else:
-            param_map[arg.id] = entry_point.params[index + 2].name
+            param_map[arg] = entry_point.params[index + 2].name
     entry_point.params = [p for p in entry_point.params
                           if p.name not in to_remove_symbols]
     return [type for index, type in enumerate(entry_type)
@@ -119,11 +119,11 @@ def get_merged_arguments(block):
     args = []
     seen_args = set()
     for statement in block.statements:
-        for arg in statement.value.args:
-            if arg.id in block.live_ins and \
-               arg.id not in seen_args:
-                seen_args.add(arg.id)
-                args.append(arg)
+        for source in statement.sources:
+            if source in block.live_ins and \
+               source not in seen_args:
+                seen_args.add(source)
+                args.append(ast.Name(source, ast.Load()))
     return args
 
 
@@ -178,9 +178,9 @@ def merge_entry_points(composable_block, env):
     output_indexes = []
     curr_fusable = None
     for statement in composable_block.statements:
-        specializer = env[statement.value.func.id]
-        output_name = statement.targets[0].id
-        arg_vals = tuple(env[arg.id] for arg in statement.value.args)
+        specializer = statement.specializer
+        output_name = statement.sinks[0]
+        arg_vals = tuple(env[source] for source in statement.sources)
         env[output_name] = specializer.get_placeholder_output(arg_vals)
         mergeable_info = specializer.get_mergeable_info(arg_vals)
         proj, entry_point, entry_type, kernels = mergeable_info.proj, \
@@ -193,7 +193,7 @@ def merge_entry_points(composable_block, env):
         entry_point = find_entry_point(uniquifier.seen[entry_point], proj)
         param_map[output_name] = entry_point.params[-1].name
         entry_points.append(entry_point)
-        entry_type = remove_seen_symbols(statement.value.args, param_map,
+        entry_type = remove_seen_symbols(statement.sources, param_map,
                                          entry_point, entry_type)
         merged_entry_type.extend(entry_type[1:])
         output_indexes.append(len(merged_entry_type) - 1)

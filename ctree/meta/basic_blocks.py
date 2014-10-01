@@ -31,7 +31,7 @@ def str_dump(item, tab=0):
     elif isinstance(item, ComposableBlock):
         tab = "\n" + "".join([" " for _ in range(tab + 2)])
         return "ComposableBlock:{}{}".format(tab, tab.join(
-            map(str_dump, item.statements)))
+            map(lambda x: str_dump(x.node), item.statements)))
     elif isinstance(item, NonComposableBlock):
         tab = "\n" + "".join([" " for _ in range(tab + 2)])
         return "NonComposableBlock:{}{}".format(tab, tab.join(
@@ -43,6 +43,17 @@ def str_dump(item, tab=0):
             return ", ".join(arg.id for arg in item.args)
     raise Exception("Unsupport type for dumping {}: {}".format(type(item),
                                                                item))
+
+
+class Statement(object):
+    _fields = ['node']
+
+    def __init__(self, node, specializer):
+        self.node = node
+        self.specializer = specializer
+        # Infer sources and sinks for statement for now
+        self.sinks = [node.targets[0].id]
+        self.sources = [arg.id for arg in node.value.args]
 
 
 class BasicBlock(object):
@@ -81,9 +92,9 @@ BasicBlock
 
 def is_composable(statement, env):
     return isinstance(statement, ast.Assign) and \
-        isinstance(statement.value, ast.Call) and \
-        isinstance(eval_in_env(env, statement.value.func),
-                   LazySpecializedFunction)
+           isinstance(statement.value, ast.Call) and \
+           isinstance(eval_in_env(env, statement.value.func),
+                      LazySpecializedFunction)
 
 
 def separate_composable_blocks(basic_block, env):
@@ -92,14 +103,15 @@ def separate_composable_blocks(basic_block, env):
     statements = []
     for statement in basic_block.body:
         if is_composable(statement, env):
+            statement = Statement(statement, env[statement.value.func.id])
             if len(statements) > 0 and \
-               isinstance(statements[-1], ComposableBlock):
+                    isinstance(statements[-1], ComposableBlock):
                 statements[-1].add_statement(statement)
             else:
                 statements.append(ComposableBlock([statement]))
         else:
             if len(statements) > 0 and \
-               isinstance(statements[-1], NonComposableBlock):
+                    isinstance(statements[-1], NonComposableBlock):
                 statements[-1].add_statement(statement)
             else:
                 statements.append(NonComposableBlock([statement]))
@@ -139,6 +151,7 @@ def decompose(expr):
     def gen_tmp():
         gen_tmp.tmp += 1
         return "_t{}".format(gen_tmp.tmp)
+
     gen_tmp.tmp = -1
 
     def visit(expr, curr_target=None):
@@ -207,6 +220,7 @@ def decompose(expr):
         else:
             raise Exception("Unsupported expression {}".format(expr))
         return body
+
     return visit(expr)
 
 
