@@ -20,12 +20,13 @@ class ConcreteMerged(ConcreteSpecializedFunction):
         self.context, self.queue = get_context_and_queue_from_devices(
             [devices[-1]])
 
-    def finalize(self, proj, entry_name, entry_type, kernels, outputs):
+    def finalize(self, proj, entry_name, entry_type, kernels, outputs, retvals):
         self.__entry_type = entry_type
         self._c_function = self._compile(entry_name, proj,
                                          ct.CFUNCTYPE(*entry_type))
         self.__kernels = kernels
         self.__outputs = outputs
+        self.__retvals = retvals
         return self
 
     def __call__(self, *args, **kwargs):
@@ -60,26 +61,33 @@ class ConcreteMerged(ConcreteSpecializedFunction):
         cl.clWaitForEvents(*events)
         self._c_function(*processed)
 
-        buf, evt = cl.buffer_to_ndarray(self.queue, outputs[-1], like=args[0],
-                                        blocking=True)
-        evt.wait()
-        return buf
+        retvals = ()
+        for index in self.__retvals:
+            buf, evt = cl.buffer_to_ndarray(self.queue, outputs[index],
+                                            like=args[0], blocking=True)
+            evt.wait()
+            retvals += (buf, )
+        if len(retvals) > 1:
+            return retvals
+        return retvals[0]
 
 
 class MergedSpecializedFunction(LazySpecializedFunction):
-    def __init__(self, tree, entry_name, entry_type, kernels, output_indexes):
+    def __init__(self, tree, entry_name, entry_type, kernels, output_indexes,
+                 retval_indexes):
         super(MergedSpecializedFunction, self).__init__(None)
         self.__original_tree = tree
         self.__entry_name = entry_name
         self.__entry_type = entry_type
         self.__kernels = kernels
         self.__output_indexes = output_indexes
+        self.__retval_indexes = retval_indexes
 
     def transform(self, tree, program_config):
         fn = ConcreteMerged()
         return fn.finalize(self.__original_tree, self.__entry_name,
                            self.__entry_type, self.__kernels,
-                           self.__output_indexes)
+                           self.__output_indexes, self.__retval_indexes)
 
 
 def replace_symbol_in_tree(tree, old, new):
@@ -177,6 +185,8 @@ def merge_entry_points(composable_block, env):
     merged_kernels = []
     output_indexes = []
     curr_fusable = None
+    retval_indexes = []
+    target_ids = composable_block.live_outs.intersection(composable_block.kill)
     for statement in composable_block.statements:
         specializer = statement.specializer
         output_name = statement.sinks[0]
@@ -196,26 +206,29 @@ def merge_entry_points(composable_block, env):
         entry_type = remove_seen_symbols(statement.sources, param_map,
                                          entry_point, entry_type)
         merged_entry_type.extend(entry_type[1:])
+        if output_name in target_ids:
+            retval_indexes.append(len(output_indexes))
         output_indexes.append(len(merged_entry_type) - 1)
-        fusable_nodes = mergeable_info.fusable_nodes
-        if fusable_nodes is not None:
+        fusable_node = mergeable_info.fusable_node
+        if fusable_node is not None:
+            sources = [source for source in statement.sources]
+            sinks = [sink for sink in statement.sinks]
+            fusable_node.sources = sources
+            fusable_node.sinks = sinks
             if curr_fusable is not None:
-                fuse_nodes(curr_fusable, fusable_nodes[0])
-            curr_fusable = fusable_nodes[-1]
+                fuse_nodes(curr_fusable, fusable_node)
+            curr_fusable = fusable_node
 
     merged_entry_type.insert(0, None)
     merged_entry = perform_merge(entry_points)
-    for kernel in merged_kernels:
-        print(kernel)
 
-    target_ids = composable_block.live_outs.intersection(composable_block.kill)
     targets = [ast.Name(id, ast.Store()) for id in target_ids]
     merged_name = get_unique_func_name(env)
     env[merged_name] = MergedSpecializedFunction(
         Project(files), merged_entry.name.name, merged_entry_type,
-        merged_kernels, output_indexes
+        merged_kernels, output_indexes, retval_indexes
     )
-    # print(merged_entry)
+    print(merged_entry)
     # print(files[2])
     value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)
     return ast.Assign(targets, value)
@@ -223,16 +236,18 @@ def merge_entry_points(composable_block, env):
 
 class MergeableInfo(object):
     def __init__(self, proj=None, entry_point=None, entry_type=None,
-                 kernels=None, fusable_nodes=None):
+                 kernels=None, fusable_node=None):
         self.proj = proj
         self.entry_point = entry_point
         self.entry_type = entry_type
         self.kernels = kernels
-        self.fusable_nodes = fusable_nodes
+        self.fusable_node = fusable_node
 
 
 class FusableNode(object):
-    pass
+    def __init__(self):
+        self.sources = []
+        self.sinks = []
 
 
 class FusableKernel(FusableNode):
@@ -241,17 +256,17 @@ class FusableKernel(FusableNode):
                  loop_dependencies):
         """
 
-        :param local_size:
-        :type ctree.c.nodes.Assign:
-        :param global_size ctree.c.nodes.Assign:
-        :param arg_setters list[ctree.c.nodes.FunctionCall]:
-        :param enqueue_call ctree.c.nodes.FunctionCall:
-        :param kernel_decl ctree.c.nodes.FunctionDecl:
-        :param global_loads list[SymbolRef]:
-        :param global_stores list[ctree.c.nodes.Assign]:
-        :param loop_dependencies list[LoopDependenceVector]:
+        :param ctree.c.nodes.Assign local_size :
+        :param ctree.c.nodes.Assign global_size :
+        :param list[ctree.c.nodes.FunctionCall] arg_setters:
+        :param ctree.c.nodes.FunctionCall enqueue_call:
+        :param ctree.c.nodes.FunctionDecl kernel_decl:
+        :param list[SymbolRef] global_loads:
+        :param list[ctree.c.nodes.Assign] global_stores:
+        :param list[LoopDependenceVector] loop_dependencies:
         """
-        self.local_size = global_size
+        super(FusableKernel, self).__init__()
+        self.local_size = local_size
         self.global_size = global_size
         self.arg_setters = arg_setters
         self.enqueue_call = enqueue_call

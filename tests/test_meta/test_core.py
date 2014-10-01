@@ -3,7 +3,7 @@ import numpy as np
 from ctree.meta.core import meta
 from .array_add import array_add
 from .simple_stencil import simple_stencil
-from .kernels import laplacian_2d
+from .kernels import laplacian_2d, x_gradient, y_gradient
 
 
 class TestMetaDecorator(unittest.TestCase):
@@ -77,10 +77,45 @@ class TestMetaDecorator(unittest.TestCase):
         expected = simple_stencil(simple_stencil(a))
         self._check_arrays_equal(actual, expected)
 
+    def test_fused_gradient(self):
+        a = np.random.rand(512, 512).astype(np.float32) * 100
+
+        @meta
+        def fused(a):
+            y = y_gradient(a)
+            x = x_gradient(a)
+            return y, x
+        actual = fused(a)
+        expected = np.gradient(a)
+
+        try:
+            np.testing.assert_array_almost_equal(actual[0][0][1:-1, 1:-1],
+                                                 expected[0][1:-1, 1:-1])
+            np.testing.assert_array_almost_equal(actual[0][1][1:-1, 1:-1],
+                                                 expected[1][1:-1, 1:-1])
+        except AssertionError as e:
+            self.fail("Arrays not almost equal\n{}".format(e))
+
+    def test_fused_divergence(self):
+        a = np.random.rand(512, 512).astype(np.float32) * 100
+
+        @meta
+        def fused(a):
+            y = y_gradient(a)
+            x = x_gradient(a)
+            return array_add(x, y)
+        actual = fused(a)
+        expected = np.sum(np.gradient(a), axis=0)
+        try:
+            np.testing.assert_array_almost_equal(actual[1:-1, 1:-1],
+                                                 expected[1:-1, 1:-1])
+        except AssertionError as e:
+            self.fail("Arrays not almost equal\n{}".format(e))
+
 
 class TestKernels(unittest.TestCase):
     def test_laplacian(self):
-        a = np.random.rand(4, 4).astype(np.float32) * 100
+        a = np.random.rand(256, 256).astype(np.float32) * 100
         actual = laplacian_2d(a)
         from scipy.ndimage.filters import laplace
         expected = laplace(a)
@@ -88,5 +123,18 @@ class TestKernels(unittest.TestCase):
         try:
             np.testing.assert_array_almost_equal(
                 actual[1:-1, 1:-1], expected[1:-1, 1:-1], decimal=3)
+        except AssertionError as e:
+            self.fail("Arrays not almost equal\n{}".format(e))
+
+    def test_gradient(self):
+        a = np.random.rand(256, 256).astype(np.float32) * 100
+        actual = y_gradient(a), x_gradient(a)
+        expected = np.gradient(a)
+
+        try:
+            np.testing.assert_array_almost_equal(actual[0][1:-1, 1:-1],
+                                                 expected[0][1:-1, 1:-1])
+            np.testing.assert_array_almost_equal(actual[1][1:-1, 1:-1],
+                                                 expected[1][1:-1, 1:-1])
         except AssertionError as e:
             self.fail("Arrays not almost equal\n{}".format(e))

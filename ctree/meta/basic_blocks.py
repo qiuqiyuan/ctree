@@ -15,7 +15,7 @@ def eval_in_env(env, expr):
 
 def str_dump(item, tab=0):
     if isinstance(item, ast.Assign):
-        return "{} = {}".format(str_dump(item.targets[0]),
+        return "{} = {}".format(", ".join(map(str_dump, item.targets)),
                                 str_dump(item.value))
     elif isinstance(item, ast.Return):
         return "return {}".format(str_dump(item.value))
@@ -24,6 +24,8 @@ def str_dump(item, tab=0):
     elif isinstance(item, ast.Call):
         return "{}({})".format(str_dump(item.func),
                                ", ".join(map(str_dump, item.args)))
+    elif isinstance(item, ast.Tuple):
+        return "({})".format(", ".join(map(str_dump, item.elts)))
     elif isinstance(item, ast.Num):
         return str(item.n)
     elif isinstance(item, ast.Name):
@@ -156,7 +158,7 @@ def decompose(expr):
 
     def visit(expr, curr_target=None):
         if isinstance(expr, ast.Return):
-            if isinstance(expr.value, ast.Name):
+            if isinstance(expr.value, (ast.Name, ast.Tuple)):
                 body = (expr, )
             else:
                 tmp = gen_tmp()

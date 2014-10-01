@@ -24,6 +24,8 @@ def meta(func):
     orig_basic_block = get_basic_block(original_ast)
 
     def meta_specialized(*args, **kwargs):
+        if hasattr(func, '_hm_callable'):
+            return func._hm_callable(*args, **kwargs)
         # TODO: This should be done lazily as symbols are needed
         # could be problematic/slow with a large stack
         symbol_table = SymbolTable(dict(func.__globals__, **kwargs),
@@ -38,7 +40,9 @@ def meta(func):
                                                  symbol_table)
         basic_block = perform_liveness_analysis(basic_block)
         basic_block = process_composable_blocks(basic_block, symbol_table)
+        print(basic_block)
         fn = get_callable(basic_block, symbol_table)
+        func._hm_callable = fn
         return fn(*args, **kwargs)
 
     return meta_specialized
