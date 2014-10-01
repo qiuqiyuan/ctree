@@ -21,7 +21,6 @@ def meta(func):
             return array_mul(d, c)
     """
     original_ast = get_ast(func)
-    print(ast.dump(original_ast))
     orig_basic_block = get_basic_block(original_ast)
 
     def meta_specialized(*args, **kwargs):
@@ -72,6 +71,5 @@ def get_callable(basic_block, env):
         )
     ast.fix_missing_locations(tree)
     # TODO: We have to pass in the real env dict here, is this problematic?
-    print(ast.dump(tree))
     my_exec(compile(tree, filename="tmp", mode="exec"), env._env)
     return env[basic_block.name]

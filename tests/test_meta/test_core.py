@@ -3,6 +3,7 @@ import numpy as np
 from ctree.meta.core import meta
 from .array_add import array_add
 from .simple_stencil import simple_stencil
+from .kernels import laplacian_2d
 
 
 class TestMetaDecorator(unittest.TestCase):
@@ -75,3 +76,17 @@ class TestMetaDecorator(unittest.TestCase):
         actual = func(a)
         expected = simple_stencil(simple_stencil(a))
         self._check_arrays_equal(actual, expected)
+
+
+class TestKernels(unittest.TestCase):
+    def test_laplacian(self):
+        a = np.random.rand(4, 4).astype(np.float32) * 100
+        actual = laplacian_2d(a)
+        from scipy.ndimage.filters import laplace
+        expected = laplace(a)
+
+        try:
+            np.testing.assert_array_almost_equal(
+                actual[1:-1, 1:-1], expected[1:-1, 1:-1], decimal=3)
+        except AssertionError as e:
+            self.fail("Arrays not almost equal\n{}".format(e))

@@ -11,7 +11,7 @@ from ctree.c.nodes import FunctionCall, FunctionDecl, SymbolRef, Constant, \
 from ctree.templates.nodes import StringTemplate
 from ctree.ocl.nodes import OclFile
 from ctree.ocl.macros import clSetKernelArg, get_global_id, NULL
-from ctree.meta.merge import MergeableInfo, FusableKernel, LoopDependencVector
+from ctree.meta.merge import MergeableInfo, FusableKernel, LoopDependence
 
 import ctree.np
 
@@ -29,12 +29,12 @@ class OclFunc(ConcreteSpecializedFunction):
         return self
 
     def __call__(self, A, B):
-        a_buf, evt = cl.buffer_from_ndarray(self.queue, A, blocking=False)
+        a_buf, evt = cl.buffer_from_ndarray(self.queue, A, blocking=True)
         evt.wait()
-        b_buf, evt = cl.buffer_from_ndarray(self.queue, B, blocking=False)
+        b_buf, evt = cl.buffer_from_ndarray(self.queue, B, blocking=True)
         evt.wait()
         C = np.zeros_like(A)
-        c_buf, evt = cl.buffer_from_ndarray(self.queue, C, blocking=False)
+        c_buf, evt = cl.buffer_from_ndarray(self.queue, C, blocking=True)
         evt.wait()
         self._c_function(self.queue, self.kernel, a_buf, b_buf, c_buf)
         _, evt = cl.buffer_to_ndarray(self.queue, c_buf, C)
@@ -139,7 +139,9 @@ class OclAdd(LazySpecializedFunction):
             fusable_nodes=[FusableKernel(local_size, global_size, arg_setters,
                                          enqueue_call, kernel_decl,
                                          global_loads, global_stores,
-                                         [LoopDependencVector(0)])]
+                                         [LoopDependence(0, (0, )),
+                                          LoopDependence(1, (0, )),
+                                          LoopDependence(2, (0, ))])]
         )
 
 

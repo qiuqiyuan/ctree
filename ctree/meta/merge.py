@@ -22,8 +22,6 @@ class ConcreteMerged(ConcreteSpecializedFunction):
 
     def finalize(self, proj, entry_name, entry_type, kernels, outputs):
         self.__entry_type = entry_type
-        for file in proj.files:
-            print(file)
         self._c_function = self._compile(entry_name, proj,
                                          ct.CFUNCTYPE(*entry_type))
         self.__kernels = kernels
@@ -44,6 +42,7 @@ class ConcreteMerged(ConcreteSpecializedFunction):
                 program = cl.clCreateProgramWithSource(
                     self.context, kernel.codegen()).build()
                 processed.append(program[kernel.body[0].name.name])
+                kernel_index += 1
             elif index in self.__outputs:
                 buf, evt = cl.buffer_from_ndarray(self.queue,
                                                   np.zeros_like(args[0]),
@@ -64,7 +63,6 @@ class ConcreteMerged(ConcreteSpecializedFunction):
         buf, evt = cl.buffer_to_ndarray(self.queue, outputs[-1], like=args[0],
                                         blocking=True)
         evt.wait()
-        print(buf)
         return buf
 
 
@@ -137,7 +135,23 @@ def fuse_nodes(prev, next):
     :returns: TODO
 
     """
-    return next
+    if prev.local_size and next.local_size and \
+       prev.global_size and next.global_size:
+        incr = len(prev.arg_setters)
+        for setter in next.arg_setters:
+            setter.args[1].value += incr
+        new_kernel = next.arg_setters[0].args[0]
+        next.arg_setters = prev.arg_setters + next.arg_setters
+        for setter in prev.arg_setters:
+            setter.args[0] = new_kernel
+        next.kernel_decl.params = prev.kernel_decl.params + \
+            next.kernel_decl.params
+        next.kernel_decl.defn = prev.kernel_decl.defn + next.kernel_decl.defn
+        prev.enqueue_call.delete()
+    for setter in prev.arg_setters:
+        print(setter)
+    for setter in next.arg_setters:
+        print(setter)
 
 
 def merge_entry_points(composable_block, env):
@@ -175,13 +189,14 @@ def merge_entry_points(composable_block, env):
         output_indexes.append(len(merged_entry_type) - 1)
         fusable_nodes = mergeable_info.fusable_nodes
         if fusable_nodes is not None:
-            if curr_fusable is None:
-                curr_fusable = fusable_nodes[-1]
-            else:
+            if curr_fusable is not None:
                 fuse_nodes(curr_fusable, fusable_nodes[0])
+            curr_fusable = fusable_nodes[-1]
 
     merged_entry_type.insert(0, None)
     merged_entry = perform_merge(entry_points)
+    for kernel in merged_kernels:
+        print(kernel)
 
     target_ids = composable_block.live_outs.intersection(composable_block.kill)
     targets = [ast.Name(id, ast.Store()) for id in target_ids]
@@ -190,6 +205,8 @@ def merge_entry_points(composable_block, env):
         Project(files), merged_entry.name.name, merged_entry_type,
         merged_kernels, output_indexes
     )
+    # print(merged_entry)
+    # print(files[2])
     value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)
     return ast.Assign(targets, value)
 
@@ -211,7 +228,7 @@ class FusableNode(object):
 class FusableKernel(FusableNode):
     def __init__(self, local_size, global_size, arg_setters, enqueue_call,
                  kernel_decl, global_loads, global_stores,
-                 loop_dependence_vectors):
+                 loop_dependencies):
         """
 
         :param local_size:
@@ -222,7 +239,7 @@ class FusableKernel(FusableNode):
         :param kernel_decl ctree.c.nodes.FunctionDecl:
         :param global_loads list[SymbolRef]:
         :param global_stores list[ctree.c.nodes.Assign]:
-        :param loop_dependence_vectors list[LoopDependenceVector]:
+        :param loop_dependencies list[LoopDependenceVector]:
         """
         self.local_size = global_size
         self.global_size = global_size
@@ -231,9 +248,10 @@ class FusableKernel(FusableNode):
         self.kernel_decl = kernel_decl
         self.global_loads = global_loads
         self.global_stores = global_stores
-        self.loop_dependence_vectors = loop_dependence_vectors
+        self.loop_dependencies = loop_dependencies
 
 
-class LoopDependencVector(object):
-    def __init__(self, *args):
-        self.value = args
+class LoopDependence(object):
+    def __init__(self, target, vector):
+        self.target = target
+        self.vector = vector

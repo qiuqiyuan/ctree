@@ -14,7 +14,6 @@ class Analyzer(ast.NodeVisitor):
             self.visit(arg)
 
     def visit_Name(self, node):
-        print(node.id)
         if isinstance(node.ctx, ast.Load):
             if node.id not in self.kill:
                 self.gen.add(node.id)
