@@ -72,10 +72,10 @@ class TestMetaDecorator(unittest.TestCase):
             b = simple_stencil(a)
             return simple_stencil(b)
 
-        a = np.random.rand(1024).astype(np.float32) * 100
+        a = np.random.rand(32).astype(np.float32) * 100
         actual = func(a)
         expected = simple_stencil(simple_stencil(a))
-        self._check_arrays_equal(actual, expected)
+        self._check_arrays_equal(actual[1:-1], expected[1:-1])
 
     def test_fused_gradient(self):
         a = np.random.rand(512, 512).astype(np.float32) * 100

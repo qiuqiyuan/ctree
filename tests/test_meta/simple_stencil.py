@@ -11,7 +11,7 @@ from ctree.c.nodes import FunctionCall, FunctionDecl, SymbolRef, Constant, \
 from ctree.templates.nodes import StringTemplate
 from ctree.ocl.nodes import OclFile
 from ctree.ocl.macros import clSetKernelArg, get_global_id, NULL
-from ctree.meta.merge import MergeableInfo
+from ctree.meta.merge import MergeableInfo, FusableKernel, LoopDependence
 
 import ctree.np
 
@@ -132,12 +132,26 @@ class SimpleStencil(LazySpecializedFunction):
         program_cfg = (arg_cfg, tune_cfg)
         tree = deepcopy(self.original_tree)
         proj, entry_point, entry_type = self.transform(tree, program_cfg)
+        control = proj.find(CFile).find(FunctionDecl)
+        local_size, global_size = control.defn[:2]
+        arg_setters = control.defn[2:4]
+        enqueue_call = control.defn[4]
+        kernel_decl = proj.find(OclFile).find(FunctionDecl)
+        global_loads = []
+        global_stores = []
+        kernel = proj.find(OclFile)
         return MergeableInfo(
             proj=proj,
             entry_point=entry_point,
             entry_type=entry_type,
             # TODO: This should use a namedtuple or object to be more explicit
-            kernels=[proj.files[0]]
+            kernels=[kernel],
+            fusable_node=FusableKernel(
+                (32, ), (global_size.right.value, ),
+                arg_setters, enqueue_call, kernel_decl, global_loads,
+                global_stores,
+                [LoopDependence(0, (-1, )),
+                 LoopDependence(0, (1, ))])
         )
 
 simple_stencil = SimpleStencil(None)

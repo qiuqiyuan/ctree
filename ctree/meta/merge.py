@@ -2,6 +2,9 @@ __author__ = 'leonardtruong'
 
 import ast
 from ctree.ocl import get_context_and_queue_from_devices
+from ctree.ocl.macros import get_local_id, get_local_size, get_group_id
+from ctree.c.nodes import SymbolRef, Constant, Op, Assign, Add, For, \
+    AddAssign, Lt, Mul, Sub
 import pycl as cl
 import ctypes as ct
 import numpy as np
@@ -10,6 +13,7 @@ from .util import get_unique_func_name, UniqueNamer, find_entry_point, \
     SymbolReplacer
 
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
+from functools import reduce
 
 
 class ConcreteMerged(ConcreteSpecializedFunction):
@@ -143,11 +147,63 @@ def fusable(node_1, node_2):
         if node_1.local_size[i] != node_2.local_size[i] or \
            node_1.global_size[i] != node_2.global_size[i]:
             return False
-    for dependence in node_1.loop_dependencies:
+    return True
+
+
+def get_dependencies(node_2):
+    for dependence in node_2.loop_dependencies:
         for dim in dependence.vector:
             if dim != 0:
                 return False
-    return True
+
+
+class LocalPromoter(ast.NodeTransformer):
+    def __init__(self, target):
+        self.target = target
+        self.promote = False
+
+    def visit_BinaryOp(self, node):
+        if isinstance(node.op, Op.ArrayRef) and node.left.name == self.target:
+            self.promote = True
+            node.right = self.visit(node.right)
+            self.promote = False
+        else:
+            node.left = self.visit(node.left)
+            node.right = self.visit(node.right)
+        return node
+
+    def visit_FunctionCall(self, node):
+        if self.promote:
+            if node.func.name == 'get_global_id':
+                return SymbolRef('local_id')
+            elif node.func.name == 'clamp':
+                return self.visit(node.args[0].value)
+        else:
+            node.args = [self.visit(arg) for arg in node.args]
+        return node
+
+
+def promote_to_local_block(old, new, body):
+    SymbolReplacer(old, new).visit(body)
+    LocalPromoter(new).visit(body)
+
+
+class GlobalPromoter(ast.NodeTransformer):
+    def visit_FunctionCall(self, node):
+        if node.func.name == 'get_global_id':
+            return SymbolRef('global_id')
+        node.args = [self.visit(arg) for arg in node.args]
+        return node
+
+
+def redefine(body):
+    promoter = GlobalPromoter()
+    body = [promoter.visit(line) for line in body]
+    body.insert(0, Assign(SymbolRef('global_id', ct.c_int()),
+                          Add(Sub(SymbolRef('local_id'), Constant(1)),
+                              Mul(get_local_size(0),
+                                  get_group_id(0)))))
+    return body
 
 
 def fuse_nodes(prev, next):
@@ -159,16 +215,60 @@ def fuse_nodes(prev, next):
 
     """
     if fusable(prev, next):
-        incr = len(prev.arg_setters)
+        arg_symbols = []
+        arg_symbols.append(
+            [setter.args[3].arg.name for setter in prev.arg_setters])
+        arg_symbols.append(
+            [setter.args[3].arg.name for setter in next.arg_setters])
+        new_kernel = next.arg_setters[0].args[0]
+        next.kernel_decl.defn = prev.kernel_decl.defn + next.kernel_decl.defn
+        for dependence in next.loop_dependencies:
+            if dependence.target >= len(next.sources):
+                break
+            if next.sources[dependence.target] in prev.sinks and \
+               max(map(abs, dependence.vector)) > 0:
+                promote_to_local_block(
+                    next.kernel_decl.params[dependence.target].name,
+                    prev.kernel_decl.params[-1].name, next.kernel_decl)
+                next.kernel_decl.params[dependence.target]._local = True
+                next.kernel_decl.params[dependence.target]._global = False
+                prev.arg_setters[-1].delete()
+                next.arg_setters[dependence.target].args[3] = SymbolRef('NULL')
+                size = (next.local_size[i] + abs(dependence.vector[i]) * 2
+                        for i in range(len(dependence.vector)))
+                local_size = reduce(lambda x, y: x * y, size)
+                next.arg_setters[dependence.target].args[2] = Constant(
+                    local_size * ct.sizeof(cl.cl_float))
+                prev_body = next.kernel_decl.defn[:len(prev.kernel_decl.defn)]
+                del next.kernel_decl.defn[:len(prev.kernel_decl.defn)]
+                prev_body = redefine(prev_body)
+                next.kernel_decl.defn.insert(
+                    0, For(Assign(SymbolRef('local_id', ct.c_int()),
+                                  SymbolRef('get_local_id(0)')),
+                           Lt(SymbolRef('local_id'), Constant(local_size)),
+                           AddAssign(SymbolRef('local_id'), Constant(32)),
+                           prev_body
+                       ))
+                next.kernel_decl.defn.insert(
+                    1, SymbolRef('barrier(CLK_LOCAL_MEM_FENCE)'))
+                next.kernel_decl.defn.insert(
+                    2, Assign(SymbolRef('local_id', ct.c_int()),
+                              Add(get_local_id(0), Constant(1))))
+                prev.kernel_decl.params.pop()
+                break
+        incr = 0
+        for setter in prev.arg_setters:
+            if not setter.deleted:
+                incr += 1
         for setter in next.arg_setters:
             setter.args[1].value += incr
-        new_kernel = next.arg_setters[0].args[0]
         next.arg_setters = prev.arg_setters + next.arg_setters
         for setter in prev.arg_setters:
             setter.args[0] = new_kernel
         next.kernel_decl.params = prev.kernel_decl.params + \
             next.kernel_decl.params
-        next.kernel_decl.defn = prev.kernel_decl.defn + next.kernel_decl.defn
+        print(next.kernel_decl)
+        prev.kernel_decl.defn = [SymbolRef('return')]
         prev.enqueue_call.delete()
 
 

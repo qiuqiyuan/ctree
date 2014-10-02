@@ -276,14 +276,13 @@ class YGradient(LazySpecializedFunction):
             entry_point=entry_point,
             entry_type=entry_type,
             # TODO: This should use a namedtuple or object to be more explicit
-            kernels=[proj.files[0]],
+            kernels=[kernel],
             fusable_node=FusableKernel(
                 (16, 16), tuple(value for value in global_size.body),
                 arg_setters, enqueue_call, kernel_decl, global_loads,
                 global_stores,
-                [LoopDependence(0, (0, )),
-                 LoopDependence(1, (0, )),
-                 LoopDependence(2, (0, ))])
+                [LoopDependence(0, (0, -1)),
+                 LoopDependence(0, (0, 1))])
         )
 
 
@@ -391,14 +390,13 @@ class XGradient(LazySpecializedFunction):
             entry_point=entry_point,
             entry_type=entry_type,
             # TODO: This should use a namedtuple or object to be more explicit
-            kernels=[proj.files[0]],
+            kernels=[kernel],
             fusable_node=FusableKernel(
                 (16, 16), tuple(value for value in global_size.body),
                 arg_setters, enqueue_call, kernel_decl, global_loads,
                 global_stores,
-                [LoopDependence(0, (0, )),
-                 LoopDependence(1, (0, )),
-                 LoopDependence(2, (0, ))])
+                [LoopDependence(0, (-1, 0)),
+                 LoopDependence(0, (1, 0))])
         )
 
 
