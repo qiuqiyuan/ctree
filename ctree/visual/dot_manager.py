@@ -27,7 +27,7 @@ class DotManager(object):
     @staticmethod
     def dot_ast_to_file(ast_node, file_name):
         dot_text = ast_node.to_dot()
-        dot_output = DotManager.run_dot(dot_text, filename)
+        dot_output = DotManager.run_dot(dot_text, file_name=file_name)
 
 
     @staticmethod
